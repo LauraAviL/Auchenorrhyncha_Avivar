@@ -1,0 +1,222 @@
+---
+title: 'Chapter 4:'
+subtitle: "Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors"
+author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 5
+    toc_float: TRUE
+    number_section: FALSE
+    theme: "cosmo"
+    code_download: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+/* Justificar todo el texto en párrafos y listas */
+p, li {
+  text-align: justify;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+```{r message=FALSE}
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,
+  bipartite, FSA, vegan, mvabund, reshape2
+)
+```
+
+## 1.3 NDMS and PERMANOVA
+
+```{r}
+tax<-read_excel(here("data/resultado_taxonomia_final2.xlsx")) 
+tax1<-tax%>% dplyr::filter(año!=2020, !iden %in% c("noiden", "genero"))
+```
+
+### 1.3.1 Seleccion por fecha+habitat+crop
+
+```{r} 
+species <-dcast(data = tax1, formula = fecha+habitat + crop ~species, fun.aggregate = sum, value.var = "total") 
+sum(rowSums(species[-c(1, 2, 3,99)]) == 0) 
+species <- species[rowSums(species[, -c(1,2,3,99)])> 0, ]
+```
+
+```{r}
+sp<-species[,4:98] #Community matriz (Abundance)
+sp_crop <- as.factor(species$crop) #metadata crop
+sp_habitat <- as.factor(species$habitat) #metadata habitat
+sp_full<-species[,2:3] #metadata full
+sp_full$habitat <- as.factor(sp_full$habitat) 
+sp_full$crop <- as.factor(sp_full$crop) 
+```
+
+#### 1.3.1.1 NDMS
+
+```{r}
+ sp1 <- metaMDS(comm = sp,
+               distance = "bray",
+               trace = TRUE)
+```
+
+```{r}
+# Ajustar especies al NMDS
+species_fit <- envfit(sp1, sp, permutations = 999)
+species_scores <- as.data.frame(scores(species_fit, "vectors"))
+species_scores$species <- rownames(species_scores)  # Asignar nombres de especies
+```
+
+```{r}
+species_scores$r2 <- species_fit$vectors$r
+species_scores <- species_scores[species_fit$vectors$pvals < 0.05 & species_scores$r2 > 0.2, ] # Filtrar solo especies con alta significancia
+```
+
+Plot
+
+```{r}
+nmds_points <- as.data.frame(scores(sp1, display = "sites"))
+nmds_points$crop <- sp_crop  # add crop
+nmds_points$habitat <- sp_habitat   # add habitat
+```
+
+```{r}
+ggplot(data = nmds_points, aes(x = NMDS1, y = NMDS2, color = crop, shape = habitat)) +
+  geom_point(size = 3, alpha = 0.8) +  # Puntos de los sitios
+  geom_mark_ellipse(aes(fill = crop), alpha = 0.2) +  # Elipses por cultivo
+  geom_segment(data = species_scores, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black", inherit.aes = FALSE) +  
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species),
+                  color = "black", size = 3, inherit.aes = FALSE) +  
+  scale_shape_manual(values = c(16, 17, 15)) +  # Formas: círculo, triángulo, cuadrado
+  theme_minimal()
+```
+
+#### 1.3.1.2 PERMANOVA
+
+```{r}
+bray_dist <- vegdist(sp, method = "bray")
+permanova<- adonis2(bray_dist ~ crop+habitat, 
+                    data = data.frame(sp_full), 
+                    permutations = 999, 
+                    by = "margin")
+print(permanova)
+```
+
+##### 1.3.1.2.1 Dispersion
+
+PERMANOVA asume que la dispersión de los grupos es homogénea
+
+```{r}
+b_c <- betadisper(vegdist(sp, method = "bray"), group = sp_full$crop)
+permutest(b_c, permutations = 999)
+boxplot(b_c)
+```
+
+```{r}
+b_h <- betadisper(vegdist(sp, method = "bray"), group = sp_full$habitat)
+permutest(b_h, permutations = 999)
+boxplot(b_h)
+```
+
+No hay diferencias entre la comunidad
+
+### 1.3.2 Seleccion por habitat+crop
+
+Ordenacion por habitat y cultivo
+
+```{r}
+species<-dcast(data = tax1, formula = habitat + crop ~ code,
+               fun.aggregate = sum, value.var = "total")
+sum(rowSums(species[, -c(1, 2,98)]) == 0)
+```
+
+```{r}
+sp<-species[,3:97] #Community matriz (Abundance)
+sp_crop <- as.factor(species$crop) #metadata
+sp_habitat <- as.factor(species$habitat) #metadata
+sp_full<-species[,1:2] #metadata full
+sp_full$habitat <- as.factor(sp_full$habitat) 
+sp_full$crop <- as.factor(sp_full$crop) 
+```
+
+```{r}
+ sp1 <- metaMDS(comm = sp,
+               distance = "bray",
+               trace = TRUE)
+```
+
+```{r}
+# Ajustar especies al NMDS
+species_fit <- envfit(sp1, sp, permutations = 999)
+species_scores <- as.data.frame(scores(species_fit, "vectors"))
+species_scores$species <- rownames(species_scores)  # Asignar nombres de especies
+```
+
+```{r}
+species_scores$r2 <- species_fit$vectors$r
+species_scores <- species_scores[species_fit$vectors$pvals < 0.05 & species_scores$r2 > 0.2, ] # Filtrar solo especies con alta significancia
+```
+
+Plot
+
+```{r}
+nmds_points <- as.data.frame(scores(sp1, display = "sites"))
+nmds_points$crop <- sp_crop  # add crop
+nmds_points$habitat <- sp_habitat   # add habitat
+```
+
+```{r}
+ggplot(data = nmds_points, aes(x = NMDS1, y = NMDS2, color = crop, shape = habitat)) +
+  geom_point(size = 3, alpha = 0.8) +  # Puntos de los sitios
+  geom_mark_ellipse(aes(fill = crop, group = crop), alpha = 0.2) +  # Elipses por cultivo
+  geom_segment(data = species_scores, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black", inherit.aes = FALSE) +  
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species),
+                  color = "black", size = 3, inherit.aes = FALSE) +  
+  scale_shape_manual(values = c(16, 17, 15)) +  # Formas: círculo, triángulo, cuadrado
+  theme_minimal()
+```
+
+#### 1.3.1.2 PERMANOVA
+
+```{r}
+bray_dist <- vegdist(sp, method = "bray")
+permanova<- adonis2(bray_dist ~ crop+habitat, 
+                    data = data.frame(sp_full), 
+                    permutations = 999, 
+                    by = "margin")
+print(permanova)
+```
+
+##### 1.3.1.2.1 Dispersion
+
+PERMANOVA asume que la dispersión de los grupos es homogénea
+
+```{r}
+b_c <- betadisper(vegdist(sp, method = "bray"), group = sp_full$crop)
+permutest(b_c, permutations = 999)
+boxplot(b_c)
+```
+
+```{r}
+b_h <- betadisper(vegdist(sp, method = "bray"), group = sp_full$habitat)
+permutest(b_h, permutations = 999)
+boxplot(b_h)
+```
+
+No hay ordenacion de comunidad por cultivo \# 1. Auchenorrhyncha Olive
+Crops \## 1.1.Interaction network analysis
