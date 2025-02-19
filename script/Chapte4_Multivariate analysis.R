@@ -3,7 +3,7 @@ rm(list = ls(all.names = TRUE))
 pacman::p_unload(pacman::p_loaded(), character.only = TRUE)
 pacman::p_load(skimr,writexl,readr,readxl,data.table)
 pacman::p_load(tidyverse,tidylog,summarytools,here,plotrix,lubridate, textshape) 
-pacman::p_load(bipartite) 
+pacman::p_load(bipartite,ggforce, FSA, vegan, mvabund, reshape2, iNEXT,indicspecies, ggrepel) 
 
 ###*`Multivariate analysis CHAPTER 4`
 #AUCHENORRYNCHA WOODY CROPS----
@@ -252,14 +252,14 @@ boxplot(b)
 # Auchenorrhyncha in Olive----
 tax2<-tax1%>% dplyr::filter(crop=="Olive")
 #habitat y cultivo  conjunto
-species1<-dcast(data = tax2, formula = fecha+id_finca~ code,
+species<-dcast(data = tax2, formula = fecha+id_finca~ code,
                 fun.aggregate = sum, value.var = "total")
-sum(rowSums(species1[, -c(1,2, 73)]) == 0) # 525 lines=0
-species1 <- species1[rowSums(species1[, -c(1, 2,73)]) > 0, ] #delete 525 lines
+sum(rowSums(species[, -c(1,2, 73)]) == 0) # 16 lines=0
+species <- species[rowSums(species[, -c(1, 2,73)]) > 0, ] #delete 16 lines
 
 #Matriz
 species<-species[,-98] #elimino columna NA
-sp<-species[,3:73] #Community matriz (Abundance)
+sp<-species[,3:72] #Community matriz (Abundance)
 sp_plot <- as.factor(species$id_finca) #metadata
 sp_habitat <- as.factor(species$habitat) #metadata
 sp_full<-species[,1:2]
@@ -269,10 +269,11 @@ sp_full$crop <- as.factor(sp_full$crop) #metadata
 #Hay 386 filas con valor cero
 #Aplico la transformacion de "hellinger"
 sp_trans <- decostand(sp, method = "hellinger")
+sp.sq <- sqrt(sp)
 #NMDS
 sp1<-metaMDS(comm = sp,
              distance = "bray",
-             trace = TRUE)
+             trace = TRUE,k = 2, trymax = 999, autotransform = FALSE)
 print(sp1)
 
 nmds_points <- as.data.frame(scores(sp1, display = "sites"))  # Solo coordenadas de plots
@@ -280,14 +281,14 @@ nmds_points$plot <- sp_plot  # Agregar nombres de los plots
 nmds_points$habitat <- sp_habitat 
 
 # Ajustar especies al NMDS
-species_fit <- envfit(sp1, sp, permutations = 999)
+species_fit <- envfit(sp1, sp.sq, permutations = 999)
 species_scores <- as.data.frame(scores(species_fit, "vectors"))
 species_scores$species <- rownames(species_scores)  # Asignar nombres de especies
 
 
 # Filtrar solo especies con alta significancia (opcional)
 species_scores$r2 <- species_fit$vectors$r
-species_scores <- species_scores[species_fit$vectors$pvals < 0.05 ]
+species_scores <- species_scores[species_fit$vectors$pvals < 0.05, ]
 
 ggplot(data = nmds_points, aes(x = NMDS1, y = NMDS2, color = plot)) +
   geom_point(size = 3, alpha = 0.8) +  # Puntos de los sitios
