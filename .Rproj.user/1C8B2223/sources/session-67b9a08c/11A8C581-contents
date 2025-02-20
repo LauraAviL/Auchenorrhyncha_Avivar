@@ -1,0 +1,774 @@
+---
+title: 'Distribution and bioecology of Auchenorrhyncha (Hemiptera) in western Andalusian agroecosystems, with data for the control of potential vectors of Xylella fastidiosa'  
+subtitle: "Chapter 4: Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors"
+author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 5
+    toc_float: TRUE
+    number_section: TRUE
+    theme: "cosmo"
+    code_download: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+  body {
+    text-align: justify;
+  }
+</style>
+```
+
+```{r message=FALSE}
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,
+  bipartite, FSA, vegan, mvabund, reshape2, iNEXT,indicspecies
+)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(
+  dev        = "png",
+  fig.path   = paste0(here::here("figure", "C4_Multivariante"), "/plot-"),
+  fig.width  = 10,
+  fig.height = 8, 
+  dpi=300
+)
+```
+
+# Auchenorrhyncha Woody Crops
+
+**Do Auchenorrhyncha communities vary across different woody crops?**
+
+-   Prepare data
+
+```{r}
+tax<-read_excel(here("data/resultado_taxonomia_final2.xlsx")) 
+
+tax1<-tax%>% dplyr::filter(año!=2020, !iden %in% c("noiden", "genero"))
+
+```
+
+-   Create an interaction matrix for each infraorder
+
+```{r}
+tax2<-tax1%>% dplyr::filter(suborden=="Cicadomorpha")%>% #Redo with 'Fulgoromorpha'
+  group_by(crop, subfamily) %>% 
+  summarise(ind=sum(total, na.rm = TRUE)) %>%  
+  ungroup() %>%  
+  pivot_wider( names_from=subfamily,
+               names_sep=".", 
+               values_from=ind, 
+               values_fn=sum, values_fill=0) %>%  
+  ungroup()
+
+tax2<-textshape::column_to_rownames(tax2, loc =1)
+tax2 <- as.matrix(tax2)# transform the data into a matrix
+
+ourweb<-tax2
+
+#Vectors specifying the colors for the high trophic level, interactions and lower trophic level
+
+paleta_suave <- colors_cultivos <- c( "lightpink",   "dodgerblue",   "orange",   "olivedrab",    "purple")
+
+high.colors <- c(rep("deeppink4",94))
+
+low.colors <- rep(paleta_suave, times = c(1, 1, 1,1,1))  
+
+int.colors <- rep (c (rep("dimgray",500)))
+```
+
+## Interaction network analysis
+
+```{r}
+plotweb (ourweb, method="normal", #other is method="cca"
+         arrow="center",
+         labsize= 0.5,
+         text.rot="90", 
+         col.low= low.colors,
+         col.high= high.colors,         
+         col.interaction= int.colors,
+         bor.col.low="transparent",  
+         bor.col.high="transparent",    
+         bor.col.interaction="transparent" )
+```
+
+## Alpha diversity indices
+
+### Rarefaction curves
+
+```{r}
+species<-dcast(data = tax1, formula = crop ~ code,
+               fun.aggregate = sum, value.var = "total")
+species<-species[,1:96]
+num_muestreos <- data.frame(
+  crop = c("Almond", "Olive", "Vineyard", "Citrus", "Blueberry"),
+  Num_sample = c(204, 794, 302, 210, 284))
+species <- left_join(species, num_muestreos, by = "crop")
+abundancia_matriz <- as.matrix(species[, -c(1, ncol(species))])
+rownames(abundancia_matriz) <- species$crop
+mincrop<-204
+abundancia_normalizada <- abundancia_matriz / species$Num_sample
+abundancia_estandarizada <- abundancia_normalizada * mincrop
+abundancia_estandarizada <- round(abundancia_estandarizada)
+abundancia_estandarizada <- t(abundancia_estandarizada)
+```
+
+```{r}
+rare_data <- iNEXT(as.data.frame(abundancia_estandarizada), 
+                   q = 0, datatype = "abundance")
+```
+
+-   Plot
+
+```{r}
+ggiNEXT(rare_data, type = 1) + 
+  labs(title = "Rarefaction Curves",
+       x = "Standardized sample size",
+       y = "Richness") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1", name = "Crop") +  
+  scale_fill_brewer(palette = "Set1", guide = "none") +  
+  guides(shape = "none") +  
+  theme(legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        panel.grid.major = element_line(size = 0.1),
+        panel.grid.minor = element_blank()) +
+  geom_line(linewidth = 0.2)
+```
+
+-   Community matrix and metadata
+
+```{r}
+species<-dcast(data = tax1, formula = fecha+  crop ~ code,
+               fun.aggregate = sum, value.var = "total")
+sum(rowSums(species[, -c(1, 2,98)]) == 0)
+species <- species[rowSums(species[, -c(1, 2,98)]) > 0, ] #delete 58 lines
+sp<-species[,3:97] #Community matrix 
+species$crop<-as.factor(species$crop)
+sp_c<-species[,2] #metadata
+sp_c <- as.data.frame(sp_c)
+colnames(sp_c) <- "crop" 
+sp_c$crop<-as.factor(sp_c$crop)
+```
+
+### Diversity indices
+
+-   Calculation of diversity indices
+
+```{r}
+diversity_alfa<-sp |> 
+  as.data.frame() |> 
+  mutate(Richness = specnumber(sp),
+    Shannon = diversity(sp, index = "shannon"),
+    Simpson = diversity(sp, index = "simpson"),
+    Pielou = Shannon / log(Richness)) |>  #  Pielou's Evenness 
+  bind_cols(sp_c)
+```
+
+-   Plot diversity
+
+```{r}
+diversity_alfa_long <- diversity_alfa %>%
+  pivot_longer(cols = c(Richness, Shannon, Simpson, Pielou),
+    names_to = "Indice",
+    values_to = "Valor")
+diversity_alfa_long$Indice <- factor(diversity_alfa_long$Indice, 
+                                      levels = c("Richness", "Shannon", "Simpson", "Pielou"))
+diversity_alfa_long <- diversity_alfa_long %>% filter(!is.na(Valor))
+```
+
+-   Plot
+
+```{r}
+ggplot(diversity_alfa_long, aes(x = crop, y = Valor, fill = crop)) +
+  geom_boxplot(alpha = 0.7, outlier.size = 1, outlier.alpha = 0.8) +
+  geom_jitter(width = 0.1, alpha = 0.5, size = 0.5) +
+  facet_wrap(~ Indice, scales = "free_y", ncol = 2) +
+  theme_minimal(base_size = 16) +
+  labs(title = "",
+       x = "",
+       y = expression (alpha~"Diversity indices")) +
+  # Eliminar la leyenda
+  theme(legend.position = "none",
+        # Ajustar el fondo y las líneas de la cuadrícula para un aspecto más limpio
+        panel.grid.major = element_line(color = "grey90"),
+        panel.grid.minor = element_blank(),
+        # Alinear mejor las etiquetas del facet
+        strip.background = element_rect(fill = "white", color = "white"),
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_text(size = 10, 
+                                   color = "black",
+                                   face = "bold",
+                                   angle = 45, 
+                                   hjust = 1))
+```
+
+-   Non-parametric analyses Kruskal-Wallis test
+
+    ```{r}
+    K.S<-kruskal.test(Richness ~ crop, data = diversity_alfa)
+    print(K.S)
+    K.H<-kruskal.test(Shannon ~ crop, data = diversity_alfa)
+    print(K.H)
+    K.D<-kruskal.test( Simpson ~ crop, data = diversity_alfa)
+    print(K.D)
+    K.J<-kruskal.test( Pielou ~ crop, data = diversity_alfa)
+    print(K.J)
+    ```
+
+-   Dunn's test for the results of pairwise comparisons between crops
+    for the alpha diversity indices, only if Kruskal-Wallis is
+    significant.
+
+    ```{r}
+    dunn_S <- dunnTest(Richness ~ crop, data = diversity_alfa, method = "bonferroni")
+    print(dunn_S)
+
+    dunn_H <- dunnTest(Shannon ~ crop, data = diversity_alfa, method = "bonferroni")
+    print(dunn_H)
+
+    dunn_D <- dunnTest(Simpson ~ crop, data = diversity_alfa, method = "bonferroni")
+    print(dunn_D)
+    ```
+
+## NDMS and PERMANOVA
+
+```{r}
+tax<-read_excel(here("data/resultado_taxonomia_final2.xlsx")) 
+tax1<-tax%>% dplyr::filter(año!=2020, !iden %in% c("noiden", "genero"))
+```
+
+Variation in community composition by crop and sampling date using NMDS
+
+-   Species abundance matrix by crop and sampling date for NMDS analysis
+
+```{r}
+species <-dcast(data = tax1, formula = fecha+ crop ~species, fun.aggregate = sum, value.var = "total") 
+sum(rowSums(species[-c(1, 2,98)]) == 0) 
+species <- species[rowSums(species[, -c(1,2,98)])> 0, ]
+```
+
+```{r}
+sp<-species[,3:97] #Community matriz (Abundance)
+sp_crop <- as.factor(species$crop) #metadata crop
+```
+
+### NDMS
+
+```{r,results = "hide"}
+sp1<-metaMDS(sp,autotransform = FALSE,
+             distance = "bray", 
+             k = 2, 
+             trymax = 999)
+```
+
+```{r}
+print(sp1)
+```
+
+-   Fitting species to NMDS and extracting species vectors
+
+```{r}
+# Ajustar especies al NMDS
+species_fit <- envfit(sp1, sp, permutations = 999)
+species_scores <- as.data.frame(scores(species_fit, "vectors"))
+species_scores$species <- rownames(species_scores)  # Asignar nombres de especies
+```
+
+```{r}
+species_scores$r2 <- species_fit$vectors$r
+species_scores <- species_scores[species_fit$vectors$pvals < 0.05 & species_scores$r2 > 0.2, ] # Filtrar solo especies con alta significancia
+```
+
+-   Plot
+
+```{r}
+nmds_points <- as.data.frame(scores(sp1, display = "sites"))
+nmds_points$crop <- sp_crop  # add crop
+```
+
+```{r}
+ggplot(data = nmds_points, aes(x = NMDS1, y = NMDS2, color = crop)) +
+  geom_point(size = 3, alpha = 0.8) +  # Puntos de los sitios
+  geom_mark_ellipse(aes(fill = crop), alpha = 0.2) +  # Elipses por cultivo
+  geom_segment(data = species_scores, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2),
+               arrow = arrow(length = unit(0.2, "cm")), color = "black", inherit.aes = FALSE) +  
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species),
+                  color = "black", size = 3, inherit.aes = FALSE) +  
+  scale_shape_manual(values = c(16, 17, 15)) +  # Formas: círculo, triángulo, cuadrado
+  theme_minimal()
+```
+
+### PERMANOVA
+
+```{r}
+bray_dist <- vegdist(sp, method = "bray")
+permanova<- adonis2(bray_dist ~ sp_crop,
+                    permutations = 999)
+print(permanova)
+```
+
+#### Dispersion
+
+Verification of the assumption of homogeneous dispersion in PERMANOVA
+
+```{r}
+b_c <- betadisper(vegdist(sp, method = "bray"), group = sp_crop)
+permutest(b_c, permutations = 999)
+boxplot(b_c)
+```
+
+A priori, the Auchenorrhyncha community is similar across different
+crops. However, since some differences have been found in the diversity
+indices, we proceed to identify the indicator species for each crop and
+habitat. The models will be used to further deepen the analysis.
+
+## IndVal_index_Auchenorryncha
+
+```{r}
+matriz_abundancia <- tax1 %>%
+  group_by(fecha, id_finca, crop, species) %>%
+  summarise(ind = sum(total, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = species, values_from = ind, values_fill = 0) %>%
+  select(-fecha, -id_finca)
+matriz_abundancia <- as.data.frame(matriz_abundancia)
+matriz_abundancia[, -1] <- apply(matriz_abundancia[, -1], 2, as.numeric)
+```
+
+```{r}
+indval_result <- multipatt(matriz_abundancia[, -1], matriz_abundancia$crop, func = "IndVal.g", control = how(nperm = 999))
+summary(indval_result)
+```
+
+-   FDR Correction for Multiple Testing Analysis
+
+```{r}
+indval_result$sign$p_value_fdr <- p.adjust(indval_result$sign$p.value, method = "fdr")
+signif_species <- indval_result$sign[indval_result$sign$p_value_fdr < 0.05, ] %>%
+  rownames_to_column(var = "Species") %>%
+  na.omit()
+```
+
+```{r}
+long_data <- signif_species %>%
+  pivot_longer(cols = starts_with("s."), names_to = "crop", values_to = "Presencia") %>%
+  filter(Presencia == 1) %>%
+  group_by(Species) %>%
+  mutate(max_stat = max(stat)) %>%
+  ungroup() %>%
+  mutate(Species = reorder(Species, -max_stat),
+         crop = gsub("^s\\.", "", crop),
+         significance = case_when(
+           p_value_fdr <= 0.001 ~ "***",
+           p_value_fdr <= 0.01 ~ "**",
+           p_value_fdr <= 0.05 ~ "*",
+           TRUE ~ ""
+         ))
+```
+
+-   Heatmap "IndVal Auchenorryncha Crops"
+
+```{r}
+# Crear el heatmap (MATRIZ DE COLOR) con los nombres de las especies en cursiva y los asteriscos
+ggplot(long_data, aes(x = crop, y = Species, fill = stat)) +
+  geom_tile(color = "white") +  
+  geom_text(aes(label = significance), color = "black", size = 5, vjust = 0.5) +  # Añadir asteriscos de significancia
+  scale_fill_gradient(low = "lightblue", high = "blue", na.value = "grey90") +  
+  labs(title = "IndVal Auchenorryncha Crops",
+       x = "",
+       y = "",
+       fill = "IndVal index") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 1, size = 12, color="black"), 
+        axis.text.y = element_text(size = 12, face = "italic",color="black"),  
+        axis.title = element_text(size = 12),  
+        plot.title = element_text(size = 14, face = "bold"), 
+        panel.grid = element_blank(),  
+        panel.spacing = unit(0.5, "lines"))  
+```
+
+-   Adapt the code to extract the Heatmap 'IndVal Auchenorryncha
+    Habitat"
+
+# Auchenorrhyncha Olive
+
+**How do Auchenorrhyncha communities vary across different olive grove
+plots?**
+
+-   Data
+
+```{r}
+tax3<-tax1 |> dplyr::filter(crop=='Olive')
+```
+
+## Alpha diversity indices.
+
+### Rarefaction curves
+
+-   Matrix
+
+```{r}
+species<-dcast(data = tax3, formula = fecha+id_finca~ code,
+                fun.aggregate = sum, value.var = "total")
+sp<-species[,3:72] #Community matriz (Abundance)
+sp_plot <- as.character(species$id_finca) #metadata
+```
+
+```{r}
+esfuerzo_minimo <- 138
+```
+
+```{r}
+Plots <- unique(sp_plot)
+```
+
+```{r}
+spec_list <- list()
+```
+
+```{r}
+for (Plot in Plots) {
+  subset_abundancia <- sp[which(sp_plot == Plot), , drop = FALSE]
+  
+  # Calcular specaccum con un máximo de individuos de 'esfuerzo_minimo'
+  spec <- specaccum(subset_abundancia, method = "random", permutations = 100)
+  
+  # Crear un data frame hasta 'esfuerzo_minimo'
+  max_sample <- min(length(spec$richness), esfuerzo_minimo)
+  
+  spec_df <- data.frame(
+    Individuos = 1:max_sample,
+    Riqueza = spec$richness[1:max_sample],
+    SD = spec$sd[1:max_sample],
+    Plot = Plot
+  )
+  
+  # Almacenar en la lista
+  spec_list[[Plot]] <- spec_df
+}
+```
+
+```{r}
+spec_combined <- bind_rows(spec_list, .id = "Plot")
+```
+
+```{r}
+
+# Graficar las curvas de rarefacción con barras de error
+ggplot(spec_combined, aes(x = Individuos, y = Riqueza, color = Plot, fill = Plot)) +
+  geom_line(size = 1) +
+  geom_ribbon(aes(ymin = Riqueza - SD, ymax = Riqueza + SD), alpha = 0.2, color = NA) +
+  theme_minimal() +
+  labs(title = "Rarefaction curves",
+       x = "Standardized sample size",
+       y = "Richness") +
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10))
+
+```
+
+### Diversity indices
+
+-   Matrix
+
+```{r}
+species<-dcast(data = tax3, formula = fecha+id_finca~ code,
+                fun.aggregate = sum, value.var = "total")
+sp<-species[,3:72] #Community matriz (Abundance)
+sp_plot <- as.factor(species$id_finca) #metadata
+sp_plot <- as.data.frame(sp_plot)
+colnames(sp_plot) <- "plot"
+```
+
+-   Calculation of diversity indices
+
+```{r}
+diversity_alfa<-sp |> 
+  as.data.frame() |> 
+  mutate(Richness = specnumber(sp),
+    Shannon = diversity(sp, index = "shannon"),
+    Simpson = diversity(sp, index = "simpson"),
+    Pielou = Shannon / log(Richness)) |>  #  Pielou's Evenness 
+  bind_cols(sp_plot )
+```
+
+-   Plot diversity
+
+```{r}
+diversity_alfa_long <- diversity_alfa %>%
+  pivot_longer(cols = c(Richness, Shannon, Simpson, Pielou),
+    names_to = "Indice",
+    values_to = "Valor")
+diversity_alfa_long$Indice <- factor(diversity_alfa_long$Indice, 
+                                      levels = c("Richness", "Shannon", "Simpson", "Pielou"))
+diversity_alfa_long <- diversity_alfa_long %>% filter(!is.na(Valor))
+```
+
+-   Plot
+
+```{r}
+ggplot(diversity_alfa_long, aes(x = plot, y = Valor, fill = plot)) +
+  geom_boxplot(alpha = 0.7, outlier.size = 1, outlier.alpha = 0.8) +
+  geom_jitter(width = 0.1, alpha = 0.5, size = 0.5) +
+  facet_wrap(~ Indice, scales = "free_y", ncol = 2) +
+  theme_minimal(base_size = 16) +
+  labs(title = "",
+       x = "",
+       y = expression (alpha~"Diversity indices")) +
+  # Eliminar la leyenda
+  theme(legend.position = "none",
+        # Ajustar el fondo y las líneas de la cuadrícula para un aspecto más limpio
+        panel.grid.major = element_line(color = "grey90"),
+        panel.grid.minor = element_blank(),
+        # Alinear mejor las etiquetas del facet
+        strip.background = element_rect(fill = "white", color = "white"),
+        strip.text = element_text(face = "bold"),
+        axis.text.x = element_text(size = 10, 
+                                   color = "black",
+                                   face = "bold",
+                                   angle = 45, 
+                                   hjust = 1))
+```
+
+-   Non-parametric analyses Kruskal-Wallis test
+
+    ```{r}
+    K.S<-kruskal.test(Richness ~ plot, data = diversity_alfa)
+    print(K.S)
+    K.H<-kruskal.test(Shannon ~ plot, data = diversity_alfa)
+    print(K.H)
+    K.D<-kruskal.test( Simpson ~ plot, data = diversity_alfa)
+    print(K.D)
+    K.J<-kruskal.test( Pielou ~ plot, data = diversity_alfa)
+    print(K.J)
+    ```
+
+-   Dunn's test for the results of pairwise comparisons between crops
+    for the alpha diversity indices, only if Kruskal-Wallis is
+    significant.
+
+    ```{r}
+    dunn_S <- dunnTest(Richness ~ plot, data = diversity_alfa, method = "bonferroni")
+    print(dunn_S)
+
+    dunn_H <- dunnTest(Shannon ~ plot, data = diversity_alfa, method = "bonferroni")
+    print(dunn_H)
+
+    dunn_D <- dunnTest(Simpson ~ plot, data = diversity_alfa, method = "bonferroni")
+    print(dunn_D)
+
+    dunn_J <- dunnTest(Pielou ~ plot, data = diversity_alfa, method = "bonferroni")
+    print(dunn_J)
+    ```
+
+## NDMS and PERMANOVA
+
+```{r}
+species <- tax3 %>%
+  group_by(fecha, id_finca, code) %>%
+  summarise(abundancia_total = sum(total, na.rm = TRUE), .groups = 'drop')
+
+sp <- species %>%
+  pivot_wider(names_from = code, 
+              values_from = abundancia_total, 
+              values_fill = list(abundancia_total = 0))
+
+sp<-sp %>%dplyr:: select(-3)
+
+sp <- sp[rowSums(sp[, -c(1, 2)]) > 0, ] 
+sp_plot <- sp %>%
+  select(fecha, id_finca)
+sp <- sp %>%
+  select(-fecha, -id_finca) %>%
+  as.matrix()
+```
+
+### NMDS
+
+```{r,results = "hide"}
+sp1<-metaMDS(sp,autotransform = FALSE, distance = "bray", k = 2, trymax = 999)
+```
+
+```{r}
+print(sp1)
+```
+
+```{r}
+coord_muestras <- as.data.frame(sp1$points)
+coord_especies <- as.data.frame(wascores(sp1$points,sp))
+```
+
+```{r}
+coord_muestras <- cbind(coord_muestras, id_finca = sp_plot$id_finca)
+coord_muestras$id_finca <- as.factor(coord_muestras$id_finca)
+```
+
+```{r, warning= FALSE}
+ggplot(coord_muestras, aes(x = MDS1, y = MDS2, color = id_finca)) +
+  stat_ellipse(aes(fill = id_finca), alpha = 0.2, geom = "polygon") +
+  geom_text_repel(data = coord_especies, aes(x = MDS1, y = MDS2, label = rownames(coord_especies)), 
+                  color = "black", size = 3, max.overlaps = 35) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +  # Línea horizontal discontinua
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +  # Línea vertical discontinua
+  xlim(-1.5, 0.5) +
+  ylim(-1, 1) +
+  theme_minimal(base_size = 15) +
+  theme(panel.background = element_rect(fill = "white", color = NA),  # Fondo blanco
+        panel.grid.major = element_line(color = "gray90"),             # Líneas de cuadrícula suaves
+        panel.grid.minor = element_blank()) +                         # Sin cuadrícula menor
+  labs(title = "NMDS de Cicadomorpha por Plot", x = "NMDS1", y = "NMDS2")
+```
+
+### PERMANOVA
+
+```{r}
+sp <- data.matrix(sp)
+bray_dist <- vegdist(sp, method = "bray")
+permanova<- adonis2(bray_dist ~id_finca,data=sp_plot,
+                    permutations = 999)
+print(permanova)
+```
+
+#### Dispersion
+
+Verification of the assumption of homogeneous dispersion in PERMANOVA
+
+```{r}
+b_p <- betadisper(vegdist(sp, method = "bray"), group = sp_plot$id_finca)
+permutest(b_p, permutations = 999)
+boxplot(b_p)
+```
+
+```{r}
+plot(b_p, hull = TRUE, ellipse = TRUE, label = TRUE, main = "Homogeneity of Dispersions by Type of Plot")
+```
+
+Post-hoc tests for PERMANOVA.
+
+```{r}
+#Pruebas post-hoc de permanova de calculo manual
+fincas <- unique(sp_plot$id_finca)
+pares <- combn(fincas, 2, simplify = FALSE)
+
+resultados <- data.frame(
+  Finca1 = character(),
+  Finca2 = character(),
+  F.Model = numeric(),
+  R2 = numeric(),
+  p.value = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for(par in pares){
+  finca1 <- par[1]
+  finca2 <- par[2]
+  
+  indices <- which(sp_plot$id_finca %in% c(finca1, finca2))
+  
+  matriz_subset <- sp[indices, ]
+  metadatos_subset <- sp_plot[indices, ]
+  
+  metadatos_subset$id_finca <- as.factor(metadatos_subset$id_finca)
+  
+  bray_subset <- vegdist(matriz_subset, method = "bray")
+  
+  perma <- adonis2(bray_subset ~ id_finca, data = metadatos_subset)
+  
+  resultados <- rbind(resultados, data.frame(
+    Finca1 = finca1,
+    Finca2 = finca2,
+    F.Model = perma$F[1],
+    R2 = perma$R2[1],
+    p.value = perma$`Pr(>F)`[1]
+  ))
+}
+
+# Ajuste de los valores p por el método de Bonferroni
+resultados$p.adjusted <- p.adjust(resultados$p.value, method = "bonferroni")
+
+# Visualización de los resultados
+print(resultados)
+
+```
+
+A priori, the Auchenorrhyncha community is different in olive plots. The
+models will be used to further deepen the analysis.
+
+## IndVal_index_Auchenorryncha
+
+```{r}
+matriz_abundancia <- tax3 %>%
+  group_by(fecha, id_finca,  species) %>%
+  summarise(ind = sum(total, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = species, values_from = ind, values_fill = 0) %>%
+  select(-fecha)
+matriz_abundancia <- as.data.frame(matriz_abundancia)
+matriz_abundancia[, -1] <- apply(matriz_abundancia[, -1], 2, as.numeric)
+```
+
+```{r}
+indval_result <- multipatt(matriz_abundancia[, -1], matriz_abundancia$id_finca, func = "IndVal.g", control = how(nperm = 999))
+summary(indval_result)
+```
+
+-   FDR Correction for Multiple Testing Analysis
+
+```{r}
+indval_result$sign$p_value_fdr <- p.adjust(indval_result$sign$p.value, method = "fdr")
+signif_species <- indval_result$sign[indval_result$sign$p_value_fdr < 0.05, ] %>%
+  rownames_to_column(var = "Species") %>%
+  na.omit()
+```
+
+```{r}
+long_data <- signif_species %>%
+  pivot_longer(cols = starts_with("s."), names_to = "plot", values_to = "Presencia") %>%
+  filter(Presencia == 1) %>%
+  group_by(Species) %>%
+  mutate(max_stat = max(stat)) %>%
+  ungroup() %>%
+  mutate(Species = reorder(Species, -max_stat),
+         plot = gsub("^s\\.", "", plot),
+         significance = case_when(
+           p_value_fdr <= 0.001 ~ "***",
+           p_value_fdr <= 0.01 ~ "**",
+           p_value_fdr <= 0.05 ~ "*",
+           TRUE ~ ""
+         ))
+```
+
+-   Heatmap "IndVal Auchenorryncha Crops"
+
+```{r}
+ggplot(long_data, aes(x = plot, y = Species, fill = stat)) +
+  geom_tile(color = "white") +  
+  geom_text(aes(label = significance), color = "black", size = 5, vjust = 0.5) +  # Añadir asteriscos de significancia
+  scale_fill_gradient(low = "lightblue", high = "blue", na.value = "grey90") +  
+  labs(title = "IndVal Auchenorryncha Olive",
+       x = "",
+       y = "",
+       fill = "IndVal index") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 1, size = 12, color="black"), 
+        axis.text.y = element_text(size = 12, face = "italic",color="black"),  
+        axis.title = element_text(size = 12),  
+        plot.title = element_text(size = 14, face = "bold"), 
+        panel.grid = element_blank(),  
+        panel.spacing = unit(0.5, "lines"))  
+```

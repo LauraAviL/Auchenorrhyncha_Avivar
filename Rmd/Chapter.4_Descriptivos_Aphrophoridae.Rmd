@@ -1,0 +1,809 @@
+---
+title: 'Chapter 4:'
+subtitle: "Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors"
+author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 5
+    toc_float: TRUE
+    number_section: TRUE
+    theme: "cosmo"
+    code_download: true
+    code_folding: "show"
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+  body {
+    text-align: justify;
+  }
+</style>
+```
+
+```{r message=FALSE}
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,
+  bipartite, FSA, vegan, mvabund, reshape2,flextable,stringr)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(
+  dev        = "png",
+  fig.path   = paste0(here::here("figure", "C4_Descrptivos_Aphrophoridae"), "/plot-"),
+  fig.width  = 10,
+  fig.height = 8, 
+  dpi=300
+)
+```
+
+# Descriptive analyses of Aphrophoridae in Western Andalusia
+
+-   Data
+
+```{r}
+data<-read_excel(here("data/ninfas_completa_por_spp_sep_2024.xlsx"))
+
+abundancia<-data %>% 
+  dplyr::select(1:9,13) %>%  
+  pivot_wider(names_from=vect_1, names_sep=".", 
+              values_from=ind, values_fn=sum, values_fill=0)|>
+  rename(sumNC="neophilaenus campestris", sumLC="lepyronia coleoptrata",sumPH="philaenus spumarius", sumAC="aphrophora corticea") 
+
+abundancia<-abundancia[,-10] #delate NA
+
+abundancia$ind <- rowSums(abundancia[, c("sumNC", "sumLC", "sumPH")], na.rm = TRUE)
+provincia<-c("ca01" = 'Cádiz', "ca02" ='Cádiz', "ca03" = 'Cádiz', "co01" = 'Córdoba', "co02" = 'Córdoba', "co03" ='Córdoba',  "hu01" = 'Huelva', "hu02" = 'Huelva', "hu03" ='Huelva', "hu04" = 'Huelva', "se01" = 'Sevilla', "se02"='Sevilla')
+
+abundancia$provincia <-provincia[abundancia$id_finca]
+crop<-  c("ca01" = 'Almond', "ca02" ='Olive', "ca03" = 'Vineyard', "co01" = 'Olive', "co02" = 'Citrus', "co03" = 'Vineyard',"hu01" = 'Blueberry', "hu02" = 'Blueberry', "hu03" ='Vineyard', "hu04" = 'Olive', "se01" = 'Olive', "se02"='Olive')
+
+abundancia$crop <-crop[abundancia$id_finca]
+
+sum(is.na(abundancia$id_loc))
+```
+
+## Density of Aphrophoridae nymphs by month and province
+
+```{r}
+d_aphro <-abundancia%>% group_by(provincia,mes) %>%
+  summarise(ncm=mean(sumNC, na.rm = TRUE),
+            nce=std.error(sumNC, na.rm = TRUE),
+            lcm=mean(sumLC, na.rm = TRUE),
+            lce=std.error(sumLC, na.rm = TRUE),
+            phm=mean(sumPH, na.rm = TRUE),
+            phe=std.error(sumPH, na.rm = TRUE),
+            apm=mean(ind, na.rm = TRUE),
+            ape=std.error(ind, na.rm = TRUE))
+
+d_aphro_long <- d_aphro %>%
+  pivot_longer(cols = c(ncm, lcm, phm, apm), names_to ="variable", values_to = "value") %>%
+  mutate(error_value = case_when(variable == "ncm" ~ nce,
+                                 variable == "lcm" ~ lce,
+                                 variable == "phm" ~ phe,
+                                 variable == "apm" ~ ape)) %>%
+  rename(Species="variable")
+
+d_aphro_long$Species <- factor(recode(d_aphro_long$Species,
+                                      ncm = "Neophilaenus campestris",
+                                      lcm = "Lepyronia coleoptrata",
+                                      phm = "Philaenus spumarius",
+                                      apm = "Aphrophoridae total"),
+                               levels = c("Aphrophoridae total",
+                                          "Neophilaenus campestris",
+                                          "Lepyronia coleoptrata",
+                                          "Philaenus spumarius"))
+
+d_aphro_long$Species <- factor(d_aphro_long$Species, 
+                               levels = c("Neophilaenus campestris", "Lepyronia coleoptrata", "Philaenus spumarius", "Aphrophoridae total"))
+
+
+```
+
+```{r}
+A <- d_aphro_long %>% 
+  ggplot(aes(x = as.factor(mes), y = value, fill = Species))+
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = pmax(value - error_value, 0), ymax = value + error_value), 
+                position = position_dodge(width = 0.9), 
+                width = 0.2) +
+  scale_fill_manual(values = c("Neophilaenus campestris" = "#466983", 
+                               "Lepyronia coleoptrata" = "#E7C76F", 
+                               "Philaenus spumarius" = "#93CF7B", 
+                               "Aphrophoridae total" = "#D3D3D3")) +
+  labs(title = "",
+       x = "",
+       y = "Density (mean ± se) of Aphrophoridae nymphs",
+       fill = "Species") +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"), 
+                   labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May")) +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(hjust = 0, size = 16, face = "bold"),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text(face = "italic", color = "black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        legend.position = "bottom") +
+  facet_wrap(~ provincia, scales = "free_y")
+```
+
+```{r}
+A 
+```
+
+## Density of Aphrophoridae nymphs by month and crops
+
+```{r}
+d_aphro <-abundancia%>% group_by(crop,mes) %>%
+  summarise(ncm=mean(sumNC, na.rm = TRUE),
+            nce=std.error(sumNC, na.rm = TRUE),
+            lcm=mean(sumLC, na.rm = TRUE),
+            lce=std.error(sumLC, na.rm = TRUE),
+            phm=mean(sumPH, na.rm = TRUE),
+            phe=std.error(sumPH, na.rm = TRUE),
+            apm=mean(ind, na.rm = TRUE),
+            ape=std.error(ind, na.rm = TRUE))
+
+d_aphro_long <- d_aphro %>%
+  pivot_longer(cols = c(ncm, lcm, phm, apm), 
+               names_to = "variable", 
+               values_to = "value") %>%
+  mutate(error_value = case_when(variable == "ncm" ~ nce,
+                                 variable == "lcm" ~ lce,
+                                 variable == "phm" ~ phe,
+                                 variable == "apm" ~ ape)) %>%
+  rename(Species="variable")
+
+d_aphro_long$Species <- factor(recode(d_aphro_long$Species,
+                                      ncm = "Neophilaenus campestris",
+                                      lcm = "Lepyronia coleoptrata",
+                                      phm = "Philaenus spumarius",
+                                      apm = "Aphrophoridae total"), 
+                               levels = c("Aphrophoridae total",
+                                          "Neophilaenus campestris",
+                                          "Lepyronia coleoptrata",
+                                          "Philaenus spumarius"))
+
+d_aphro_long$Species <- factor(d_aphro_long$Species,
+                               levels = c("Neophilaenus campestris",
+                                          "Lepyronia coleoptrata",
+                                          "Philaenus spumarius",
+                                          "Aphrophoridae total"))
+
+```
+
+```{r}
+B <- d_aphro_long %>%  
+  ggplot(aes(x = as.factor(mes), y = value, fill = Species)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = pmax(value - error_value, 0), ymax = value + error_value),  
+                position = position_dodge(width = 0.9), width = 0.2) +
+  scale_fill_manual(values = c("Neophilaenus campestris" = "#466983", 
+                               "Lepyronia coleoptrata" = "#E7C76F", 
+                               "Philaenus spumarius" = "#93CF7B", 
+                               "Aphrophoridae total" = "#D3D3D3")) +
+  labs(title = "",
+       x = "",
+       y = "Density (mean ± se) of Aphrophoridae nymphs",
+       fill = "Species") +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"), 
+                   labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May")) +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(hjust = 0,
+                                  size = 16,
+                                  face = "bold"),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text(face = "italic", color = "black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.2),
+        legend.position = "bottom") +
+  facet_wrap(~ crop, scales = "free_y")
+```
+
+```{r}
+B
+```
+
+## Density of Aphrophoridae nymphs by month and habitat
+
+```{r}
+d_aphro <-abundancia%>% group_by(habitat,mes) %>%
+  summarise(ncm=mean(sumNC, na.rm = TRUE),
+            nce=std.error(sumNC, na.rm = TRUE),
+            lcm=mean(sumLC, na.rm = TRUE),
+            lce=std.error(sumLC, na.rm = TRUE),
+            phm=mean(sumPH, na.rm = TRUE),
+            phe=std.error(sumPH, na.rm = TRUE),
+            apm=mean(ind, na.rm = TRUE),
+            ape=std.error(ind, na.rm = TRUE))
+
+d_aphro_long <- d_aphro %>%
+  pivot_longer(cols = c(ncm, lcm, phm, apm), 
+               names_to = "variable", 
+               values_to = "value") %>%
+  mutate(error_value = case_when(variable == "ncm" ~ nce,
+                                 variable == "lcm" ~ lce,
+                                 variable == "phm" ~ phe,
+                                 variable == "apm" ~ ape)) %>%
+  rename(Species="variable")
+
+d_aphro_long$Species <- factor(recode(d_aphro_long$Species,
+                                      ncm = "Neophilaenus campestris",
+                                      lcm = "Lepyronia coleoptrata",
+                                      phm = "Philaenus spumarius",
+                                      apm = "Aphrophoridae total"), 
+                               levels = c("Aphrophoridae total", 
+                                          "Neophilaenus campestris",  
+                                          "Lepyronia coleoptrata", 
+                                          "Philaenus spumarius"))
+
+d_aphro_long$Species <- factor(d_aphro_long$Species, 
+                               levels = c("Neophilaenus campestris", 
+                                          "Lepyronia coleoptrata", 
+                                          "Philaenus spumarius", 
+                                          "Aphrophoridae total"))
+
+```
+
+```{r,fig.width=10, fig.height=2}
+C <- d_aphro_long %>%  
+  ggplot(aes(x = as.factor(mes), y = value, fill = Species)) +
+  geom_bar(stat = "identity", 
+           position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = pmax(value - error_value, 0),
+                    ymax = value + error_value),
+                position = position_dodge(width = 0.9),
+                width = 0.2) +
+  scale_fill_manual(values = c("Neophilaenus campestris" = "#466983", 
+                               "Lepyronia coleoptrata" = "#E7C76F", 
+                               "Philaenus spumarius" = "#93CF7B", 
+                               "Aphrophoridae total" = "#D3D3D3")) +
+  labs(title = "",
+       x = "",
+       y = "Density (mean ± se) of Aphrophoridae nymphs",
+       fill = "Species") +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"), 
+                   labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May")) +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(hjust = 0, size = 16, face = "bold"),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text(face = "italic", color = "black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.2),
+        legend.position = "bottom") +
+  facet_wrap(~ habitat, scales = "free_y")
+```
+
+```{r}
+C
+```
+
+## Density of Aphrophoridae nymphs by month
+
+```{r}
+d_aphro <-abundancia%>% group_by(mes) %>%
+  summarise(ncm=mean(sumNC, na.rm = TRUE),
+            nce=std.error(sumNC, na.rm = TRUE),
+            lcm=mean(sumLC, na.rm = TRUE),
+            lce=std.error(sumLC, na.rm = TRUE),
+            phm=mean(sumPH, na.rm = TRUE),
+            phe=std.error(sumPH, na.rm = TRUE),
+            apm=mean(ind, na.rm = TRUE),
+            ape=std.error(ind, na.rm = TRUE))
+
+d_aphro_long <- d_aphro %>%
+  pivot_longer(cols = c(ncm, lcm, phm, apm),
+               names_to = "variable", 
+               values_to = "value") %>%
+  mutate(error_value = case_when(variable == "ncm" ~ nce,
+                                 variable == "lcm" ~ lce,
+                                 variable == "phm" ~ phe,
+                                 variable == "apm" ~ ape)) %>%
+  rename(Species="variable")
+
+d_aphro_long$Species <- factor(recode(d_aphro_long$Species,
+                                      ncm = "Neophilaenus campestris",
+                                      lcm = "Lepyronia coleoptrata",
+                                      phm = "Philaenus spumarius",
+                                      apm = "Aphrophoridae total"), 
+                               levels = c("Aphrophoridae total", 
+                                          "Neophilaenus campestris",  
+                                          "Lepyronia coleoptrata", 
+                                          "Philaenus spumarius"))
+
+d_aphro_long$Species <- factor(d_aphro_long$Species, 
+                               levels = c("Neophilaenus campestris", 
+                                          "Lepyronia coleoptrata", 
+                                          "Philaenus spumarius", 
+                                          "Aphrophoridae total"))
+```
+
+```{r,fig.width=10, fig.height=6}
+D <- d_aphro_long %>%  
+  ggplot(aes(x = as.factor(mes), y = value, fill = Species)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = pmax(value - error_value, 0), ymax = value + error_value),
+                position = position_dodge(width = 0.9),
+                width = 0.2) +
+  scale_fill_manual(values = c("Neophilaenus campestris" = "#466983", 
+                               "Lepyronia coleoptrata" = "#E7C76F", 
+                               "Philaenus spumarius" = "#93CF7B", 
+                               "Aphrophoridae total" = "#D3D3D3")) +
+  labs(title = "",
+       x = "",
+       y = "Density (mean ± se) of Aphrophoridae nymphs",
+       fill = "Species") +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"), 
+                   labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May")) +
+  theme_minimal(base_size = 15) +
+  theme(plot.title = element_text(hjust = 0, size = 16, face = "bold"),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text(face = "italic", color = "black"),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.2),
+        legend.position = "bottom")
+```
+
+```{r}
+D
+```
+
+# Vegetation and Aphrophoridae nymphs
+
+```{r}
+ninfa<-read_excel(here("data_raw/ninfas_datos_bruto2.xlsx"))
+col_types <- rep("text", ncol(ninfa))
+ninfa1 <- read_excel(here("data_raw/ninfas_datos_bruto2.xlsx"), 
+                     col_types = col_types)
+
+unique(ninfa1$vect_2)
+
+ninfa1 <-ninfa1 %>% 
+dplyr::select(id_loc, id_finca, dia_muestreo, dia_ano, cultivo, cuadrante, habitat,host_fam, host_gen, host_sp,vect_2)
+
+columnas_a_convertir <- c( "dia_muestreo", "dia_ano"  )
+
+ninfa1 <- ninfa1 %>%
+  mutate_at(vars(columnas_a_convertir),
+            as.numeric)
+str(ninfa1)
+
+ninfa2<-cbind(ninfa, ninfa1)
+names(ninfa2)
+
+ninfa2<-ninfa2[,c(-(15:38),-(40:55))]
+
+ninfa2<-ninfa2%>% 
+  filter(nin_total != 0) #Eliminar valores cero
+sum(is.na(ninfa2))
+```
+
+-   Families
+
+```{r}
+ninfa2 %>% 
+  dplyr::summarise(total_especies = n_distinct(host_sp))
+
+
+
+sum(grepl("spp.$", ninfa2$host_sp)) ##534 especimenes identificados a nivel de genero
+sum(grepl("spp.$",unique(ninfa2$host_sp)))  #22 generos 
+
+ninfa2$nin_total<-as.numeric(ninfa2$nin_total)
+sum(is.na(ninfa2))
+ninfa2 <- na.omit(ninfa2)
+
+ninfa2<-ninfa2 %>% 
+  dplyr::filter(vect_1!="aphrophora corticea") #delete A. corticea
+
+unique(ninfa2$host_fam) #16 familias
+
+ninfa2 %>% dplyr::summarise(total_especies = n_distinct(host_sp)) #88-21 (identificados a nivel de genero) =67
+unique(ninfa2$host_gen) #67-4 (identificados a familia)=63 generos
+diccionario_abreviaturas <- c(  
+  'aegilops geniculata' = 'AeGe', 	'aeluropus littoralis' = 'AeLi', 	
+  'anagallis arvensis' = 'AngAr', 	'andryala integrifolia' = 'AnIn', 
+  'anthemis arvensis' = 'AnAr', 	'arisarum vulgare' = 'ArVu', 
+  'avena barbata' = 'AvBa', 	'avena sterilis' = 'AvSt', 
+  'borago oficinalis' = 'BoOf', 	'brachypodium distachyon' = 'BrcDi', 	
+  'briza maxima' = 'BrzMa', 	'bromus diandrus' = 'BrDi', 	
+  'bromus hordeaceus' = 'BrHo', 	'bromus macrantherus' = 'BrMa', 	
+  'bromus rubens' = 'BrRu', 	'calendula arvensis' = 'CaAr', 	
+  'carduus pycnocephalus' = 'CaPy', 	'carpobrotus edulis' = 'CaEd', 
+  'carthamus lanatus' = 'CaLa', 	'cerastium glomeratum' = 'CeGl', 
+  'chrozophora tinctoria' = 'ChTi', 	'chrysanthemum coronarium' = 'ChCo',
+  'cichorium intybus' = 'CiIn', 	'cistus crispus' = 'CiCr', 	
+  'cistus monspeliensis' = 'CiMo', 	'cistus salviifolium' = 'CiSa', 
+  'convolvulus althaeoides' = 'CoAl', 	'convolvulus arvensis' = 'CoAr', 
+  'conyza canadensis' = 'CoCa',  	'coronilla repanda' = 'CoRe', 
+  'corrigiola litoralis' = 'CoLi',  'crepis capillaris' = 'CrCa', 	'crepis mollis' = 'CrMo', 
+  'crepis sancta' = 'CrSa', 	'crepis vesicaria' = 'CrVe', 	'cynodon dactylon' = 'CyDa', 
+  'dactylis glomerata' = 'DaGl', 	'daucus carota' = 'DaCa', 	'dittrichia viscosa' = 'DiVi', 
+  'ecballium elaterium' = 'EcEl', 	'echium plantagineum' = 'EcPl', 	'echium vulgare' = 'EcVu', 
+  'eragrostis minor' = 'ErMi', 	'erigeron canadensis' = 'ErCa', 	'erodium acaule' = 'ErAc', 
+  'erodium ciconium' = 'ErCi', 	'erodium cicutarium' = 'ErCit', 	'erodium malacoides' = 'ErMa', 
+  'erodium moschatum' = 'ErMo', 	'eruca sativa' = 'ErSa', 	'euphorbia amygdaloides' = 'EuAm',
+  'euphorbia baetica' = 'EuBa', 	'foeniculum vulgare' = 'FoVu', 	 	'galactites tomentosa' = 'GaTo',
+  'gaudinia fragilis' = 'GaFr', 	'geranium dissectum' = 'GeDi', 	'geranium molle' = 'GeMo', 
+  'geranium rotundifolium' = 'GeRo', 	'geropogon hybridus' = 'GeHy', 	'heliotropium europaeum' = 'HeEu', 	
+  'helminthotheca echioides' = 'HeEc', 	'hirschfeldia incana' = 'HiIn', 	'holcus lanatus' = 'HoLa', 
+  'holcus mollis' = 'HoMo', 	'hordeum marinum' = 'HoMa', 	'hypochaeris glabra' = 'HyGl', 	
+  'hypochaeris radicata' = 'HyRa', 	'kickxia spuria' = 'KiSp', 	'lactuca serriola' = 'LaSe', 	
+  'lamarckia aurea' = 'LaAu', 	'linaria spartea' = 'LiSp', 	'lolium perenne' = 'LoPe', 	
+  'lolium rigidum' = 'LoRi', 	'malva parviflora' = 'MaPa', 	'malva sylvestris' = 'MaSy', 	
+  'medicago orbicularis' = 'MeOr', 	'medicago polymorpha' = 'MePo', 	'medicago sativa' = 'MeSa', 
+  'mercurialis annua' = 'MeAn', 	'misopates orontium' = 'MiOr', 	'molineriella australis' = 'MoAu',
+  'ononis minutissima ' = 'OnMi', 	'ononis mitissima' = 'OnMit', 	'ononis natrix' = 'OnNa', 
+  'ononis pubescens' = 'OnPu', 	'origanum majorana' = 'OrMa', 	'ornithopus compressus' = 'OrCo', 
+  'oxalis pescaprae' = 'OxPe', 	'pallenis spinosa' = 'PaSp', 	'phalaris canariensis' = 'PhCa', 	
+  'pilosella pseudopilosella' = 'PiPs', 	'piptatherum muliaceum' = 'PiMu', 	'plantago afra' = 'PlAf', 
+  'plantago albicans' = 'PlAl', 	'plantago coronopus' = 'PlCo', 	'plantago lagopus' = 'PlLa', 	
+  'plantago major' = 'PlMa', 	'poa annua' = 'PoAn', 	'polypogon maritimus' = 'PoMa', 	
+  'portulaca oleracea' = 'PoOl', 	'pulicaria dysenterica' = 'PuDy', 	
+  'raphanus raphanistrum' = 'RaRa', 	'rostraria cristata' = 'RoCr', 	'rumex acetosella' = 'RuAc', 
+  'rumex obtusifolius' = 'RuOb', 	'rumex pulcher' = 'RuPu', 	'salvia rosmarinus' = 'SaRo', 
+  'sanguisorba minor' = 'SaMi', 	'scandix pecten' = 'ScPe', 	'scolymus hispanicus' = 'ScHi', 
+  'scorpiurus muricatus' = 'ScMu', 	'senecio jacobaea' = 'SeJa', 	'sherardia arvensis' = 'ShAr', 	
+  'silybum marianun' = 'SiMa', 	'sonchus asper' = 'SoAs', 	'sonchus oleraceus' = 'SoOl', 
+  'sorghum halepense' = 'SoHa', 	'spergularia rubra' = 'SpRu', 	'tolpis barbata' = 'ToBa', 
+  'torilis arvensis' = 'ToAr', 	'torilis nodosa' = 'ToNo', 	'trifolium angustifolium' = 'TrAn', 
+  'trifolium arvense' = 'TrAr', 	'trifolium campestre' = 'TrCa', 	'trifolium stellatum' = 'TrSt', 
+  'urospermum picroides' = 'UrPi', 	'veronica arvensis' = 'VeAr', 	'vicia angustifolia' = 'ViAn', 	
+  'vicia lutea' = 'ViLu', 	'vicia sativa' = 'ViSa', 	'vulpia ciliata' = 'VuCi', 	'vulpia geniculata' = 'VuGe', 
+  'allium spp.' = 'AlmSp', 	'amaranthus spp.' = 'AmSp', 	'asparagus spp.' = 'AsgSp', 
+  'asphodelus spp.' = 'AspSp', 	'ast ni spp.' = 'AstNi', 	'avena spp.' = 'AvSp', 	
+  'bras ni spp.' = 'BrNi', 	'brassica spp.' = 'BrSp', 	'bromus spp.' = 'Brmsp', 	
+  'carduus spp.' = 'CaSp', 	'centaurea spp.' = 'CeSp', 	'cerastium spp.' = 'CerSp', 
+  'chaerophyllum spp.' = 'ChrSp', 	'chamaemelum spp.' = 'ChmSp', 	'chenopodium spp.' = 'ChnSp', 
+  'cistus spp.' = 'CiSp', 	'convolvulus spp.' = 'CoSp', 	'conyza spp.' = 'CnySp',
+  'crepis spp.' = 'CrSp', 	'cynara spp.' = 'CySp', 	'daucus spp.' = 'DaSp', 
+  'dianthus spp.' = 'DiaSp', 	'diplotaxis spp.' = 'DiSp', 	'erodium spp.' = 'ErSp', 
+  'eruca spp.' = 'ErcSp', 	'erucastrum spp.' = 'EruSp', 	'euphorbia spp.' = 'EupSp', 
+  'fumarias spp.' = 'FumSp', 	'galium spp.' = 'GaSp', 	'geranium spp.' = 'GeSp', 
+  'gram ni spp.' = 'GrSp', 	'hypochaeris spp.' = 'HySp', 	'juncus spp.' = 'JuSp', 	
+  'lactuca spp.' = 'lacSp', 	'lamium spp.' = 'laSp', 	'leg ni spp.' = 'legSp', 	
+  'leontodon spp.' = 'LeSp', 	'linaria spp.' = 'LinSp', 	'lolium spp.' = 'LolSp', 	
+  'lupinus spp.' = 'LuSp', 	'lysimachia spp.' = 'LySp', 	'malva spp.' = 'MaSp', 	
+  'medicago spp.' = 'MeSp', 	'melilotus spp.' = 'MelSp', 	'mentha spp.' = 'MenSp', 
+  'ononis spp.' = 'OnoSp', 	'onopordum spp.' = 'OnSp', 	'pallenis spinosa' = 'PalSp', 
+  'panicum spp.' = 'PanSp', 	'papaver spp.' = 'PapSp', 	'pinus spp.' = 'PiSp', 	
+  'plantago spp.' = 'PlSp', 	'polygonum spp.' = 'PogSp', 	'polypogon spp.' = 'PoSp', 
+  'pulicardia spp.' = 'PuSp', 	'ran ni spp.' = 'RanNi', 	'ranunculus spp.' = 'RaSp', 	'rumex spp.' = 'RuSp', 	'scabiosa spp.' = 'ScbSp', 	'scorpiurus spp.' = 'ScpSp', 	'senecio spp.' = 'SeSp', 	'silene spp.' = 'SilSp', 	'sinapis spp.' = 'SiSp', 	'sisymbrium spp.' = 'SsySp', 	'solanum spp.' = 'SolSp', 	'sonchus spp.' = 'SonSp', 	'spergula spp.' = 'SprSp', 	'stellaria spp.' = 'StlSp', 	'stipa spp.' = 'StpSp', 	'taraxacum spp.' = 'TaSp', 	'thapsia spp.' = 'ThpSp', 	'torilis spp.' = 'TorSp', 	'trifolium spp.' = 'TrfSp', 	'trisetaria spp.' = 'TrsSp', 	'urtica spp.' = 'UrSp', 	'verbascum spp.' = 'VbsSp', 	'verbena spp.' = 'VbnSo', 	'veronica spp.' = 'VrSp', 	'viburnum spp.' = 'ViSp', 	
+  'vicia spp.' = 'VicSp', 	'vulpia spp.' = 'VuSp', 'zNo vegetation' = 'No')
+
+ninfa2<-ninfa2 %>% 
+  mutate(species = case_when(
+    host_sp %in% names(diccionario_abreviaturas) ~ diccionario_abreviaturas[host_sp],TRUE ~ NA_character_  ))
+
+df<-ninfa2 %>% 
+  group_by(species,vect_1) %>% 
+  summarise(ind=sum(nin_total, na.rm = TRUE)) %>%
+  ungroup() %>% 
+  pivot_wider( names_from=vect_1,
+               names_sep=".",
+               values_from=ind,
+               values_fn=sum, 
+               values_fill=0) %>%  
+  ungroup()
+```
+
+```{r}
+df
+```
+
+```{r}
+summary(df)
+```
+
+```{r}
+ninfa3 <- ninfa2 |>
+  filter(!grepl("spp\\.$", host_sp)) |>
+  dplyr::filter(host_fam!='ni') |> 
+  dplyr::filter(host_sp!='medicago')
+sum(grepl("spp.$", ninfa3$host_sp))
+```
+
+## Relative frequency
+
+-   Species
+
+```{r}
+freq_por_especie2 <- ninfa3 %>%
+  group_by(host_fam,host_sp, vect_1) %>%
+  summarise(ind = sum(nin_total, na.rm = TRUE),
+            total_obs_sp = n()) %>% # Total de observaciones de vect_1 por especie
+  group_by(host_fam,host_sp) %>%
+  mutate(total_obs_host_sp = sum(total_obs_sp),   # Total de observaciones en cada especie
+         freq_relativa_sp = total_obs_sp / total_obs_host_sp) %>%  # Frecuencia relativa de vect_1 en la especie
+  ungroup()
+```
+
+-   Families
+
+```{r}
+freq_por_familia <- ninfa3 %>%
+  group_by(host_fam, vect_1) %>%
+  summarise(
+    ind = sum(nin_total, na.rm = TRUE),
+    total_obs_fam = n()  # Total de observaciones de vect_1 por familia
+  ) %>%
+  group_by(host_fam) %>%
+  mutate(
+    total_obs_host_fam = sum(total_obs_fam),   # Total de observaciones en cada familia
+    freq_relativa_fam = total_obs_fam / total_obs_host_fam  # Frecuencia relativa de vect_1 en la familia
+  ) %>%
+  ungroup()
+
+# Unir las frecuencias relativas a nivel de especie y familia
+frecuencias_totales <- left_join(freq_por_especie2, freq_por_familia, by = c("host_fam", "vect_1"))
+```
+
+```{r}
+# Ordena las especies por familia de planta
+frecuencias_totales <- frecuencias_totales %>%
+  mutate(host_sp = fct_inorder(factor(host_sp, levels = unique(host_sp[order(host_fam)]))))
+
+library(stringr)
+#Funtion upper
+
+capitalize_first <- function(text) {
+  text <- str_to_lower(text)  # Convierte todo a minúscula
+  str_replace(text, "^([a-z])", ~str_to_upper(.x))  # Capitaliza solo la primera letra
+}
+
+frecuencias_totales <- frecuencias_totales %>%
+  mutate(
+    host_fam = str_to_title(host_fam),
+    host_sp = capitalize_first(host_sp),  # Capitaliza solo la primera letra en host_sp
+    vect_1 = capitalize_first(vect_1),  # Capitaliza solo la primera letra en vect_1
+    # Convertir vect_1 a factor con el orden deseado
+    vect_1 = factor(vect_1, 
+                    levels = c("Neophilaenus campestris",
+                               "Lepyronia coleoptrata",
+                               "Philaenus spumarius")))
+```
+
+```{r}
+colores_vectores <- c(
+  "Neophilaenus campestris" = "#466983",
+  "Lepyronia coleoptrata" = "#E7C76F",
+  "Philaenus spumarius" = "#93CF7B"
+)
+```
+
+### Relative frequency of plant species occupied by vector
+
+```{r,fig.width=18, fig.height=14}
+ggplot(frecuencias_totales, aes(x = host_sp, y = freq_relativa_sp, fill = vect_1)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.6) +  # Ajuste del ancho de barra
+  facet_wrap(~ host_fam, scales = "free_x", nrow = 3) +  # Divide en varias filas para dar más espacio
+  labs(y = "Frecuence relative", x = "", fill = "") +
+  scale_fill_manual(values = colores_vectores) +  # Aplicar los colores personalizados
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5, size = 14, face = "italic"),  # Nombres de especies en cursiva
+    strip.text = element_text(size = 16, face = "bold"),
+    panel.spacing.x = unit(0.5, "lines"),  # Espacio entre los paneles de familia
+    legend.position = "bottom",
+    legend.text = element_text(size = 16, face = "italic") # Mover la leyenda abajo
+  )
+```
+
+### Relative frequency of plant genera defined occupied by vector
+
+```{r}
+ninfa4 <- ninfa2 %>%
+  dplyr::filter(host_fam!='ni') 
+# Calcular el resumen principal e incluir total_obs para la frecuencia relativa
+##**`Frecuencia relativa por GENERO de planta (host_GEN)`
+freq_por_genus <- ninfa4 %>%
+  group_by(host_fam,host_gen, vect_1) %>%
+  summarise(
+    ind = sum(nin_total, na.rm = TRUE),
+    total_obs_gen = n()  # Total de observaciones de vect_1 por genero
+  ) %>%
+  group_by(host_fam,host_gen) %>%
+  mutate(
+    total_obs_host_gen = sum(total_obs_gen),   # Total de observaciones en cada genus
+    freq_relativa_gen= total_obs_gen / total_obs_host_gen  # Frecuencia relativa de vect_1 en la genus
+  ) %>%
+  ungroup()
+```
+
+### Relative frequency of plant families defined occupied by vector
+
+```{r}
+freq_por_familia2 <- ninfa4 %>%
+  group_by(host_fam, vect_1) %>%
+  summarise(
+    ind = sum(nin_total, na.rm = TRUE),
+    total_obs_fam = n()  # Total de observaciones de vect_1 por familia
+  ) %>%
+  group_by(host_fam) %>%
+  mutate(
+    total_obs_host_fam = sum(total_obs_fam),   # Total de observaciones en cada familia
+    freq_relativa_fam = total_obs_fam / total_obs_host_fam  # Frecuencia relativa de vect_1 en la familia
+  ) %>%
+  ungroup()
+# Unir las frecuencias relativas a nivel de especie y familia
+frecuencias_totales2 <- left_join(freq_por_genus, freq_por_familia2, by = c("host_fam", "vect_1"))
+# Ordena las especies por familia de planta
+frecuencias_totales2 <- frecuencias_totales2 %>%
+  mutate(host_gen = fct_inorder(factor(host_gen, levels = unique(host_gen[order(host_fam)]))))
+# Función para capitalizar solo la primera letra de cada nombre completo
+capitalize_first <- function(text) {
+  text <- str_to_lower(text)  # Convierte todo a minúscula
+  str_replace(text, "^([a-z])", ~str_to_upper(.x))  # Capitaliza solo la primera letra
+}
+
+frecuencias_totales2 <- frecuencias_totales2 %>%
+  mutate(
+    host_fam = str_to_title(host_fam),
+    host_gen = capitalize_first(host_gen),  # Capitaliza solo la primera letra en host_sp
+    vect_1 = capitalize_first(vect_1),  # Capitaliza solo la primera letra en vect_1
+    # Convertir vect_1 a factor con el orden deseado
+    vect_1 = factor(vect_1, levels = c("Neophilaenus campestris", "Lepyronia coleoptrata", "Philaenus spumarius"))
+  )
+```
+
+```{r, fig.width=18, fig.height=14}
+# Crea el gráfico de barras apiladas
+# Define la paleta de colores específica para los vectores
+colores_vectores <- c(
+  "Neophilaenus campestris" = "#466983",
+  "Lepyronia coleoptrata" = "#E7C76F",
+  "Philaenus spumarius" = "#93CF7B"
+)
+
+ggplot(frecuencias_totales2, aes(x = host_gen, y = freq_relativa_gen, fill = vect_1)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.6) +  # Ajuste del ancho de barra
+  facet_wrap(~ host_fam, scales = "free_x", nrow = 3) +  # Divide en varias filas para dar más espacio
+  labs(y = "Frecuence relative", x = "", fill = "") +
+  scale_fill_manual(values = colores_vectores) +  # Aplicar los colores personalizados
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5, size = 12, face = "italic"),  # Nombres de especies en cursiva
+    strip.text = element_text(size = 14, face = "bold"),
+    panel.spacing.x = unit(0.5, "lines"),  # Espacio entre los paneles de familia
+    legend.position = "bottom",
+    legend.text = element_text(size = 14,face = "italic") # Mover la leyenda abajo
+  )
+```
+
+```{r}
+#####****`PREFERENCIA`
+### Limpiar los datos, dejar a fuera la identificacion a nivel de genero
+ninfa3 <- ninfa2 %>%
+  filter(!grepl("spp\\.$", host_sp)) %>% 
+  dplyr::filter(host_fam!='ni') %>% 
+  dplyr::filter(host_fam!='medicago')
+
+##**`Numero total de vectores`
+ind_ninfa_total<-ninfa3 %>%
+  group_by(vect_1) %>%
+  summarise(total_individuos = sum(nin_total, na.rm = TRUE))
+##**`Numero total de vectores`
+
+preferencia_vector_planta <- ninfa3 %>%
+  left_join(ind_ninfa_total, by = "vect_1") %>% 
+  mutate(freq_relativa_planta = nin_total / total_individuos) %>%  # Frecuencia relativa en cada planta
+ dplyr:: select(vect_1, host_sp, host_fam, nin_total, total_individuos, freq_relativa_planta) %>%  # Seleccionar columnas relevantes
+  arrange(vect_1, desc(freq_relativa_planta)) #Orden descendiente
+# Ordena las especies por familia de planta
+preferencia_vector_planta <- preferencia_vector_planta%>%
+  mutate(host_sp = fct_inorder(factor(host_sp, levels = unique(host_sp[order(host_fam)]))))
+# Función para capitalizar solo la primera letra de cada nombre completo
+capitalize_first <- function(text) {
+  text <- str_to_lower(text)  # Convierte todo a minúscula
+  str_replace(text, "^([a-z])", ~str_to_upper(.x))  # Capitaliza solo la primera letra
+}
+
+preferencia_vector_planta <- preferencia_vector_planta %>%
+  mutate(
+    host_fam = str_to_title(host_fam),
+    host_sp = capitalize_first(host_sp),  # Capitaliza solo la primera letra en host_sp
+    vect_1 = capitalize_first(vect_1),  # Capitaliza solo la primera letra en vect_1
+    # Convertir vect_1 a factor con el orden deseado
+    vect_1 = factor(vect_1, levels = c("Neophilaenus campestris", "Lepyronia coleoptrata", "Philaenus spumarius"))
+  )
+
+preferencia_vector_planta_agg <- preferencia_vector_planta %>%
+  group_by(vect_1, host_sp, host_fam) %>%
+  summarise(total_freq_relativa = sum(freq_relativa_planta, na.rm = TRUE)) %>%
+  ungroup()
+
+# Ordenar las especies por familia de planta
+preferencia_vector_planta_agg <- preferencia_vector_planta_agg %>%
+  mutate(
+    host_sp = factor(host_sp, levels = unique(host_sp[order(host_fam)]))  # Ordenar especies por familia
+  )
+preferencia_vector_planta_agg<- preferencia_vector_planta_agg %>%  dplyr::filter(host_sp!='Medicago')
+# Crea el gráfico de barras apiladas
+# Define la paleta de colores específica para los vectores
+```
+
+```{r, fig.width=14, fig.height=15}
+colores_vectores <- c(
+  "Neophilaenus campestris" = "#466983",
+  "Lepyronia coleoptrata" = "#E7C76F",
+  "Philaenus spumarius" = "#93CF7B"
+)
+
+# Crear gráfico de burbujas con las frecuencias relativas agregadas
+ggplot(preferencia_vector_planta_agg, aes(x = vect_1, y = host_sp, size = total_freq_relativa, color = vect_1)) +
+  geom_point(alpha = 0.9) +  # Transparencia para facilitar la lectura
+  scale_size_continuous(range = c(1, 10), name = "Frecuence relative") +  # Ajuste de tamaño de burbuja
+  scale_color_manual(values = colores_vectores) +  # Aplicar los colores personalizados
+  labs(y = "", x = "", color = "", size = "Frecuence relative") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(face = "italic", size = 14),  # Eje x en cursiva
+    axis.text.y = element_text(face = "italic", size = 14),  # Eje y en cursiva
+    legend.title = element_text(face = "italic"),  # Título de la leyenda en cursiva
+    legend.text = element_text(face = "italic"),  # Texto de la leyenda en cursiva
+    panel.spacing.y = unit(0.2, "lines"),  # Reducir la separación entre especies
+    legend.position = "right"  # Leyenda a la derecha para facilitar la lectura
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+```
+
+### Total summary of plant species, genera, and families
+
+```{r}
+ninfa3 <- ninfa2 %>%
+  filter(!grepl("spp\\.$", host_sp)) %>% 
+  dplyr::filter(host_fam!='ni') %>% 
+  dplyr::filter(host_sp!='medicago')
+
+n_especies<-ninfa2 %>% 
+  dplyr::filter(host_sp!='medicago') %>% 
+  group_by(host_fam,vect_1) %>% 
+  summarise(n_especies = n_distinct(host_sp), na.rm = TRUE)
+
+unique(ninfa3$host_sp) #63 especies
+ninfa3 <- ninfa2 %>%
+  filter(!grepl("spp\\.$", host_sp)) %>% 
+  dplyr::filter(host_fam!='ni') %>%
+  filter(!grepl("spp\\.$", host_gen))
+
+unique(ninfa3$host_gen) #53 generos
+
+ninfa3 <- ninfa2 %>% dplyr::filter(host_fam!='ni') 
+
+unique(ninfa3$host_fam) #16 familias
+
+ninfa3 <- ninfa1 %>%
+  filter(!grepl("spp\\.$", host_sp))%>% 
+  dplyr::filter(host_fam!='ni')
+
+unique(ninfa3$host_sp) #66 especies totales
+```
