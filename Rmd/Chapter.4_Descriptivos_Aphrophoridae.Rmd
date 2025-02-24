@@ -31,7 +31,7 @@ pacman::p_load(
   skimr, writexl, readr, readxl, data.table,
   tidyverse, tidylog, summarytools, here,
   plotrix, lubridate, textshape, ggrepel,ggforce,
-  bipartite, FSA, vegan, mvabund, reshape2,flextable,stringr)
+  bipartite, FSA, vegan, mvabund, reshape2,flextable,stringr,patchwork)
 ```
 
 ```{r setup, include=FALSE}
@@ -227,7 +227,9 @@ B
 ## Density of Aphrophoridae nymphs by month and habitat
 
 ```{r}
-d_aphro <-abundancia%>% group_by(habitat,mes) %>%
+d_aphro <-abundancia%>% mutate(habitat = case_when(habitat == "borde" ~ "Edge",
+                                                   habitat == "interior" ~ "Within-crop")) |> 
+  group_by(habitat,mes) %>%
   summarise(ncm=mean(sumNC, na.rm = TRUE),
             nce=std.error(sumNC, na.rm = TRUE),
             lcm=mean(sumLC, na.rm = TRUE),
@@ -265,7 +267,7 @@ d_aphro_long$Species <- factor(d_aphro_long$Species,
 
 ```
 
-```{r,fig.width=10, fig.height=2}
+```{r,fig.width=6, fig.height=4}
 C <- d_aphro_long %>%  
   ggplot(aes(x = as.factor(mes), y = value, fill = Species)) +
   geom_bar(stat = "identity", 
@@ -609,11 +611,11 @@ ggplot(frecuencias_totales, aes(x = host_sp, y = freq_relativa_sp, fill = vect_1
   scale_fill_manual(values = colores_vectores) +  # Aplicar los colores personalizados
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5, size = 14, face = "italic"),  # Nombres de especies en cursiva
+    axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5, size = 18, face = "italic", color = "black"),  # Nombres de especies en cursiva
     strip.text = element_text(size = 16, face = "bold"),
     panel.spacing.x = unit(0.5, "lines"),  # Espacio entre los paneles de familia
     legend.position = "bottom",
-    legend.text = element_text(size = 16, face = "italic") # Mover la leyenda abajo
+    legend.text = element_text(size = 18, face = "italic") # Mover la leyenda abajo
   )
 ```
 
@@ -690,11 +692,11 @@ ggplot(frecuencias_totales2, aes(x = host_gen, y = freq_relativa_gen, fill = vec
   scale_fill_manual(values = colores_vectores) +  # Aplicar los colores personalizados
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5, size = 12, face = "italic"),  # Nombres de especies en cursiva
+    axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5, size = 18, face = "italic", color = "black"),  # Nombres de especies en cursiva
     strip.text = element_text(size = 14, face = "bold"),
     panel.spacing.x = unit(0.5, "lines"),  # Espacio entre los paneles de familia
     legend.position = "bottom",
-    legend.text = element_text(size = 14,face = "italic") # Mover la leyenda abajo
+    legend.text = element_text(size = 18,face = "italic") # Mover la leyenda abajo
   )
 ```
 
@@ -750,7 +752,7 @@ preferencia_vector_planta_agg<- preferencia_vector_planta_agg %>%  dplyr::filter
 # Define la paleta de colores específica para los vectores
 ```
 
-```{r, fig.width=14, fig.height=15}
+```{r, fig.width=12, fig.height=14}
 colores_vectores <- c(
   "Neophilaenus campestris" = "#466983",
   "Lepyronia coleoptrata" = "#E7C76F",
@@ -765,14 +767,14 @@ ggplot(preferencia_vector_planta_agg, aes(x = vect_1, y = host_sp, size = total_
   labs(y = "", x = "", color = "", size = "Frecuence relative") +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(face = "italic", size = 14),  # Eje x en cursiva
-    axis.text.y = element_text(face = "italic", size = 14),  # Eje y en cursiva
+    axis.text.x = element_text(face = "italic", size = 14, color = "black"),  # Eje x en cursiva
+    axis.text.y = element_text(face = "italic", size = 14, color = "black"),  # Eje y en cursiva
     legend.title = element_text(face = "italic"),  # Título de la leyenda en cursiva
     legend.text = element_text(face = "italic"),  # Texto de la leyenda en cursiva
     panel.spacing.y = unit(0.2, "lines"),  # Reducir la separación entre especies
-    legend.position = "right"  # Leyenda a la derecha para facilitar la lectura
-  ) +
-  guides(color = guide_legend(override.aes = list(size = 5)))
+    legend.position = "bottom" ) +
+  guides(color = guide_legend(override.aes = list(size = 8)))
+          
 
 ```
 
@@ -806,4 +808,142 @@ ninfa3 <- ninfa1 %>%
   dplyr::filter(host_fam!='ni')
 
 unique(ninfa3$host_sp) #66 especies totales
+```
+
+```{r,fig.width=12, fig.height=14}
+##############################################################################################
+data<-read_excel(here("data_raw/ninfas_datos_bruto2.xlsx"))
+data <- mutate(data, year = as.numeric(format(fecha, '%Y'))) #creo una variable año
+sum(is.na(data$id_loc)) #Suma de valores NA
+data<- data[!is.na(data$id_loc), ] #eliminar NA de id_loc
+
+
+ y_limit <- 100
+# Crear la columna 'posicion' basada en presencia (1) o ausencia (0)
+data <- data %>%
+  mutate(basal_presencia = ifelse(basal > 0, 1, 0),
+         media_presencia = ifelse(media > 0, 1, 0),
+         apical_presencia = ifelse(apical > 0, 1, 0),
+         libre_presencia = ifelse(libre > 0, 1, 0),
+         position = paste(basal_presencia, media_presencia, apical_presencia, libre_presencia, sep = "_"))
+
+
+data1 <- data %>%
+  group_by(mes,id_loc,id_finca,fecha,  cuadrante, habitat, vect_1,year,position,esp_host) %>%
+  summarise(
+    est_n1 = sum(est_n1, na.rm = TRUE),
+    est_n3 = sum(est_n3, na.rm = TRUE),
+    est_n5 = sum(est_n5, na.rm = TRUE),
+    est_imago_E = sum(est_imago_E, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+stage<-data1 %>% filter(vect_1!="NA") %>% 
+  pivot_longer(cols = starts_with("est_"), names_to = "estadio", values_to = "ind") %>%
+  filter(vect_1 != "aphrophora corticea",year!="2020") %>% # Filtrar la especie y año no deseada
+ group_by( mes, vect_1)%>%
+  mutate(Total = sum(ind, na.rm = TRUE),  # Calcular el total por mes y especie
+         Percentage = (ind / Total) * 100) %>%
+  ungroup()
+
+stage <- stage %>%
+  mutate(Stage = recode(estadio, 
+                          est_n1 = "N1", 
+                          est_n3 = "N3", 
+                          est_n5 = "N5", 
+                          est_imago_E = "Imago")) %>% 
+  mutate(vect_1 = factor(vect_1, levels = c("neophilaenus campestris", "lepyronia coleoptrata", "philaenus spumarius")))  # Reordenar las especies
+
+
+# Crear gráfico de barras apiladas
+Fig7<-ggplot(stage, aes(x = mes, y = Percentage, fill = Stage)) +
+  geom_bar(stat = "identity") +
+  
+  # Facetas para cada especie (vect_1)
+  facet_wrap(~ vect_1, nrow = 1) +
+  
+  # Etiquetas y título
+  labs(title = "",
+       x = "",
+       y = "Percentage of individuals (%)",
+       fill = "Stage") +
+  scale_fill_manual(values = c("N1" = "#A8E6CF", "N3" = "#DCE775", "N5" = "#FFD54F", "Imago" = "#FF8A65")) +
+  scale_x_discrete(limits = c("1", "2", "3", "4", "5"), 
+                   labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May")) +
+  # Tema minimalista
+  theme_minimal(base_size = 15) +
+
+     # Tema limpio con texto más grande
+      theme(
+        plot.title = element_text(hjust = 0, size = 16, face = "bold"),  # Centrar el título
+        axis.title.x = element_text(size = 14),  # Tamaño del título del eje x
+        axis.title.y = element_text(size = 14),  # Tamaño del título del eje y
+        axis.text.x = element_text(size = 12,color = "black"),   # Tamaño de los textos en el eje x
+        axis.text.y = element_text(size = 12,color = "black"),     # Tamaño de los textos en el eje y
+        legend.text = element_text(face = "bold",color = "black"),
+        panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(),
+        legend.position = "bottom",
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.2))  
+    
+  Fig7
+
+  #######***GRAFICO COMBINADO***
+  #######**++++++***
+  # Organizar los datos por mes, estadio, especie y posición
+  ####****DATOS CON PORCENTAJE DE NINFAS EN POSICION POR MES***
+  posicion<-data %>% 
+    group_by( mes, vect_1)%>%
+    summarise(atotal=sum ((basal_presencia+media_presencia+apical_presencia+libre_presencia), na.rm = TRUE),
+              basal=(sum(basal_presencia, na.rm = TRUE)*100/atotal),
+              media=(sum(media_presencia, na.rm = TRUE)*100/atotal),
+              apical=(sum(apical_presencia, na.rm = TRUE)*100/atotal),
+              libre=(sum(libre_presencia, na.rm = TRUE)*100/atotal))
+  
+  
+  posicion<- posicion[!is.na(posicion$vect_1), ] #eliminar NA de id_loc
+  
+  
+  posicion1 <- posicion %>%
+    pivot_longer(cols = c(basal, media, apical,libre), names_to = "variable", values_to = "value") %>%
+    rename(Position="variable")
+  posicion1$Position <- factor(recode(posicion1$Position,
+                                      basal = "Basal",
+                                      media = "Middle",
+                                      apical = "Apical",
+                                      libre = "Free"), 
+                               levels = c("Basal", "Middle", "Apical","Free" )) 
+  
+  
+  posicion1<-posicion1 %>% 
+    mutate(vect_1 = factor(vect_1, levels = c("neophilaenus campestris", "lepyronia coleoptrata", "philaenus spumarius")))
+  
+  D <-posicion1 %>%  
+    filter(vect_1!="aphrophora corticea",) %>%
+    ggplot( aes(x = as.factor(mes), y = value, fill = Position)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+    facet_wrap(~ vect_1, nrow = 1) +
+    scale_fill_manual(values = c("Basal" = "#D6E9F2", "Middle" = "#92C5DE", "Apical" = "#4393C3", "Free" = "#2166AC"))+                    
+    labs(title ="",
+         x = "",
+         y = "Percentage of individuals (%)",
+         fill = "Position") +
+    scale_x_discrete(limits = c("1", "2", "3", "4", "5"), 
+                     labels = c("1" = "Jan", "2" = "Feb", "3" = "Mar", "4" = "Apr", "5" = "May")) +
+    scale_y_continuous(limits = c(0,  y_limit )) +
+    theme_minimal(base_size = 15) +  # Tema limpio con texto más grande
+    theme(
+      plot.title = element_text(hjust = 0, size = 16, face = "bold"),  # Centrar el título
+      axis.title.x = element_text(size = 14),  # Tamaño del título del eje x
+      axis.title.y = element_text(size = 14),  # Tamaño del título del eje y
+      axis.text.x = element_text(size = 12,color = "black"),   # Tamaño de los textos en el eje x
+      axis.text.y = element_text(size = 12,color = "black"),     # Tamaño de los textos en el eje y
+      legend.text = element_text(face = "italic",color = "black"),
+      legend.position = "bottom",
+      panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(),
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.2))  
+  D
+  
+  Fig10<-(Fig7/D)+
+    plot_annotation( tag_levels = "A")
+  Fig10
 ```

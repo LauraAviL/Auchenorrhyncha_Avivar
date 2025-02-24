@@ -1,3 +1,6 @@
+
+
+
 data1<-read_excel(here("data/ninfas_completa_por_spp_sep_2024.xlsx"))
 data2<-data1 %>% 
   pivot_wider( names_from=vect_1, names_sep=".", 

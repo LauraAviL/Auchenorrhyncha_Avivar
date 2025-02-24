@@ -210,7 +210,7 @@ ggplot(diversity_alfa_long, aes(x = crop, y = Valor, fill = crop)) +
         # Alinear mejor las etiquetas del facet
         strip.background = element_rect(fill = "white", color = "white"),
         strip.text = element_text(face = "bold"),
-        axis.text.x = element_text(size = 10, 
+        axis.text.x = element_text(size = 14, 
                                    color = "black",
                                    face = "bold",
                                    angle = 45, 
@@ -602,7 +602,11 @@ sp <- sp %>%
 ### NMDS
 
 ```{r,results = "hide"}
-sp1<-metaMDS(sp,autotransform = FALSE, distance = "bray", k = 2, trymax = 999)
+sp1<-metaMDS(sp,
+             autotransform = FALSE, 
+             distance = "bray", 
+             k = 2, 
+             trymax = 999)
 ```
 
 ```{r}
@@ -627,7 +631,7 @@ ggplot(coord_muestras, aes(x = MDS1, y = MDS2, color = id_finca)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "black") +  # Línea horizontal discontinua
   geom_vline(xintercept = 0, linetype = "dashed", color = "black") +  # Línea vertical discontinua
   xlim(-1.5, 0.5) +
-  ylim(-1, 1) +
+  ylim(-1, 1.3) +
   theme_minimal(base_size = 15) +
   theme(panel.background = element_rect(fill = "white", color = NA),  # Fondo blanco
         panel.grid.major = element_line(color = "gray90"),             # Líneas de cuadrícula suaves

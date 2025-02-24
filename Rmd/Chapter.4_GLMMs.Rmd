@@ -1,0 +1,151 @@
+---
+title: 'Distribution and bioecology of Auchenorrhyncha (Hemiptera) in western Andalusian agroecosystems, with data for the control of potential vectors of Xylella fastidiosa'  
+subtitle: "Chapter 4: Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors"
+author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 5
+    toc_float: TRUE
+    number_section: TRUE
+    theme: "cosmo"
+    code_download: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=html}
+<style>
+  body {
+    text-align: justify;
+  }
+</style>
+```
+
+```{r message=FALSE}
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,patchwork,
+  FSA, vegan, mvabund, reshape2, glmmTMB, MuMIn, lmtest, DHARMa, psych, performance, car, emmeans, sjPlot,effects, visreg, parameters, MASS, effectsize, splines, ggplot2, ggeffects, pROC,tweedie, lubridate,bbmle, moments, flextable,TMB, psych
+)
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(
+  dev        = "png",
+  fig.path   = paste0(here::here("figure", "C4_Modelos"), "/plot-"),
+  fig.width  = 10,
+  fig.height = 8, 
+  dpi=300
+)
+```
+
+```{r}
+au<-read_excel(here("data/octubre_modelos.xlsx")) #matriz adultos con envieroment
+data<-read_excel(here("data/matriz_ninfas_modelos.xlsx")) #matriz ninfas envieroment
+```
+
+```{r,echo = FALSE,results = "hide"}
+##Data estructura adultos
+au$id_loc<-as.factor(au$id_loc)
+au$id_finca<-as.factor(au$id_finca)
+au$crop<-as.factor(au$crop)
+au$habitat<-as.factor(au$habitat)
+au$manejo<-as.factor(au$manejo)
+au$seasonality<-as.factor(au$seasonality)
+au$year<-as.factor(au$year)
+au$logabun<-log(au$abundancia+1)
+au$logCV<-log(au$cv+1) 
+au$lognp_w<-log(au$np_w+1) 
+au$lognp_wo<-log(au$np_wo+1) 
+au$lognp_h<-log(au$np_h+1) 
+au$lognp_s<-log(au$np_s+1) 
+au$lognp_i<-log(au$np_i+1) 
+au$lognp_art<-log(au$np_art+1) 
+au$logDSH<-log(au$dsh+1)
+au$logPp<-log(au$prep_smn+1)
+au$logDS<-log(au$dsf+1)
+au$logshdi<-log(au$shdi+1)
+au$loged_s<-log(au$ed_s+1) 
+au$logca_h<-log(au$ca_h+1)
+au$logca_s<-log(au$ca_s+1)
+au$logTmx<-log(au$Tmax+1)
+au %>%  group_by(id_finca) %>% #numero de aspiraciones por finca
+  summarise(count_habitat = sum(n_asp, na.rm = TRUE))
+n_muestreo1<-  c("ca01" = 204, "ca02" =204, "ca03" = 136, "co01" = 210, "co02" = 210, "co03" = 70, 
+                 "hu01" = 148, "hu02" = 136, "hu03" =96, "hu04" = 138, "se01" = 150, "se02" =192)
+au$n_muestreo1 <- n_muestreo1[au$id_finca]
+au$logn_m1<-log(au$n_muestreo1+1)
+au$logn_c<-log(au$n_cultivo+1)
+##Data estructura ninfas
+data$id_loc<-as.factor(data$id_loc)
+data$id_finca<-as.factor(data$id_finca)
+data$crop<-as.factor(data$crop)
+data$habitat<-as.factor(data$habitat)
+data$manejo<-as.factor(data$manejo)
+data$seasonality<-as.factor(data$seasonality)
+data$year<-as.factor(data$year)
+data$logTm<-log(data$Tmax+1)
+data$logca_h<-log(data$ca_h+1)
+```
+
+```{r}
+set.seed(123)
+```
+
+```{r}
+options(contrasts=c(factor="contr.sum", ordered="contr.poly"))
+control.tmb <- glmmTMBControl(optCtrl=list(iter.max=1000, eval.max=1000), parallel=10) 
+```
+
+```{r}
+###**ABUNDANCIA*
+
+m1<-glmmTMB(formula = abundancia ~ crop + habitat + ns(dia, 4) +
+            (1 | id_loc:year) +logCV+ lognp_w + lognp_wo, data = au, family = genpois(link = "log"), 
+            ziformula = ~0, dispformula = ~1, offset = logn_m1,
+            control = control.tmb, REML = T)
+
+###**RIQUEZA*
+
+m2<-glmmTMB(formula = nspp ~ crop + habitat + ns(dia, 4) + (1 | id_loc:year)+
+            logCV+ lognp_w  + lognp_wo, data = au, family = genpois(link = "log"),
+            ziformula = ~0, dispformula = ~1, offset = logn_m1, 
+            control = control.tmb, REML = T)
+
+```
+
+```{r}
+p1<-plot_model(m1, show.data=FALSE, type="est", ci.lvl=0.95, terms=NULL, show.values=TRUE, value.size = 6, value.offset=0.4, colors =c("brown1","cyan4") ,
+               vline.color = "blueviolet")+theme_minimal(base_size = 14)+ theme(
+                 panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+                 panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+
+p2<-plot_model(m2, show.data=FALSE, type="est", ci.lvl=0.95, terms=NULL, show.values=TRUE, value.size = 6, value.offset=0.4, colors =c("brown1","cyan4") ,
+               vline.color = "blueviolet")+theme_minimal(base_size = 14)+ theme(
+                 panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+                 panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+(p1+p2)+ plot_annotation( tag_levels = "A")
+
+```
+
+```{r}
+pred1 <- ggpredict(m1, terms = c( "logCV","habitat","crop"))
+plot(pred1)+theme_minimal(base_size = 14)+ theme(
+  panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+  panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
+```{r}
+pred2 <-ggpredict(m1, terms = "dia")
+plot(pred2)+theme_minimal(base_size = 14)+ theme(
+  panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+  panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
