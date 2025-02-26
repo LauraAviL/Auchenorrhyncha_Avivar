@@ -1,6 +1,6 @@
 ---
-title: 'Chapter 4:'
-subtitle: "Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors"
+title: 'Chapter 4:Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors'
+subtitle: "Aphrophoridae"
 author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
 date: "`r Sys.Date()`"
 output:
@@ -603,7 +603,7 @@ colores_vectores <- c(
 
 ### Relative frequency of plant species occupied by vector
 
-```{r,fig.width=18, fig.height=14}
+```{r, fig.width=22, fig.height=17}
 ggplot(frecuencias_totales, aes(x = host_sp, y = freq_relativa_sp, fill = vect_1)) +
   geom_bar(stat = "identity", position = "fill", width = 0.6) +  # Ajuste del ancho de barra
   facet_wrap(~ host_fam, scales = "free_x", nrow = 3) +  # Divide en varias filas para dar más espacio
@@ -676,7 +676,7 @@ frecuencias_totales2 <- frecuencias_totales2 %>%
   )
 ```
 
-```{r, fig.width=18, fig.height=14}
+```{r, fig.width=22, fig.height=17}
 # Crea el gráfico de barras apiladas
 # Define la paleta de colores específica para los vectores
 colores_vectores <- c(

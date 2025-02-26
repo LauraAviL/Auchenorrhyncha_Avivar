@@ -1,6 +1,6 @@
 ---
-title: 'Distribution and bioecology of Auchenorrhyncha (Hemiptera) in western Andalusian agroecosystems, with data for the control of potential vectors of Xylella fastidiosa'  
-subtitle: "Chapter 4: Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors"
+title: 'Chapter 4: Auchenorrhyncha in the Agroecosistems of Western Andalusia with focus on the vectors of *Xylella fastidiosa*: community description, seasonal abundance, and effects of site-specific, climatic and landscape factors'
+subtitle: "GLMMs"
 author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
 date: "`r Sys.Date()`"
 output:
@@ -11,6 +11,7 @@ output:
     number_section: TRUE
     theme: "cosmo"
     code_download: true
+    code_folding: "show"
 editor_options: 
   markdown: 
     wrap: 72
@@ -33,6 +34,7 @@ pacman::p_load(
   FSA, vegan, mvabund, reshape2, glmmTMB, MuMIn, lmtest, DHARMa, psych, performance, car, emmeans, sjPlot,effects, visreg, parameters, MASS, effectsize, splines, ggplot2, ggeffects, pROC,tweedie, lubridate,bbmle, moments, flextable,TMB, psych
 )
 ```
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
@@ -56,7 +58,21 @@ data<-read_excel(here("data/matriz_ninfas_modelos.xlsx")) #matriz ninfas enviero
 au$id_loc<-as.factor(au$id_loc)
 au$id_finca<-as.factor(au$id_finca)
 au$crop<-as.factor(au$crop)
+au <- au %>%
+  mutate(crop = dplyr::recode(as.character(crop),
+      "almendro"  = "Almond",
+      "arándano"  = "Blueberry",
+      "cítricos"  = "Citrus",
+      "olivar"    = "Olive",
+      "vid"       = "Vineyard"))
 au$habitat<-as.factor(au$habitat)
+
+au <- au %>%
+  mutate(habitat = dplyr::recode(as.character(habitat),
+          "borde"="Edge",
+          "copa"="Canopy", 
+          "interior"= "Within-crop"))  
+
 au$manejo<-as.factor(au$manejo)
 au$seasonality<-as.factor(au$seasonality)
 au$year<-as.factor(au$year)
@@ -95,6 +111,7 @@ data$logTm<-log(data$Tmax+1)
 data$logca_h<-log(data$ca_h+1)
 ```
 
+
 ```{r}
 set.seed(123)
 ```
@@ -104,48 +121,689 @@ options(contrasts=c(factor="contr.sum", ordered="contr.poly"))
 control.tmb <- glmmTMBControl(optCtrl=list(iter.max=1000, eval.max=1000), parallel=10) 
 ```
 
-```{r}
-###**ABUNDANCIA*
+# Models Auchenorrhyncha woody crops 
 
+## Abundance
+
+```{r}
 m1<-glmmTMB(formula = abundancia ~ crop + habitat + ns(dia, 4) +
             (1 | id_loc:year) +logCV+ lognp_w + lognp_wo, data = au, family = genpois(link = "log"), 
             ziformula = ~0, dispformula = ~1, offset = logn_m1,
             control = control.tmb, REML = T)
+```
 
-###**RIQUEZA*
+## Richness
 
+```{r}
 m2<-glmmTMB(formula = nspp ~ crop + habitat + ns(dia, 4) + (1 | id_loc:year)+
             logCV+ lognp_w  + lognp_wo, data = au, family = genpois(link = "log"),
             ziformula = ~0, dispformula = ~1, offset = logn_m1, 
             control = control.tmb, REML = T)
-
 ```
 
 ```{r}
-p1<-plot_model(m1, show.data=FALSE, type="est", ci.lvl=0.95, terms=NULL, show.values=TRUE, value.size = 6, value.offset=0.4, colors =c("brown1","cyan4") ,
-               vline.color = "blueviolet")+theme_minimal(base_size = 14)+ theme(
-                 panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-                 panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+p1<-plot_model(m1, 
+               show.data=FALSE, 
+               type="est", 
+               ci.lvl=0.95, 
+               terms=NULL, 
+               show.values=TRUE, 
+               value.size = 6, 
+               value.offset=0.4, 
+               colors =c("brown1","cyan4") ,
+               vline.color = "blueviolet")+
+  theme_minimal(base_size = 16)+ 
+  theme( panel.border = element_rect(color = "black",
+                                     fill = NA, 
+                                     linewidth = 0.5),
+         panel.grid.major.x = element_blank(),
+         panel.grid.minor.x = element_blank())
 
-p2<-plot_model(m2, show.data=FALSE, type="est", ci.lvl=0.95, terms=NULL, show.values=TRUE, value.size = 6, value.offset=0.4, colors =c("brown1","cyan4") ,
-               vline.color = "blueviolet")+theme_minimal(base_size = 14)+ theme(
-                 panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-                 panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+p2<-plot_model(m2, 
+               show.data=FALSE, 
+               type="est", 
+               ci.lvl=0.95, 
+               terms=NULL, 
+               show.values=TRUE, 
+               value.size = 6, 
+               value.offset=0.4, 
+               colors =c("brown1","cyan4") ,
+               vline.color = "blueviolet")+
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank())
 (p1+p2)+ plot_annotation( tag_levels = "A")
-
 ```
 
 ```{r}
 pred1 <- ggpredict(m1, terms = c( "logCV","habitat","crop"))
-plot(pred1)+theme_minimal(base_size = 14)+ theme(
-  panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-  panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+a1<-plot(pred1)+
+  labs(title = "Abundance",
+       x = "",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r,fig.width=4, fig.height=4}
+pred2 <-ggpredict(m1, terms = c( "dia","habitat"))
+plot(pred2)+
+  labs(title = "",
+       x = "",
+       y = "") +
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        legend.position = "bottom")
 ```
 
 ```{r}
-pred2 <-ggpredict(m1, terms = "dia")
-plot(pred2)+theme_minimal(base_size = 14)+ theme(
-  panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-  panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+pred1 <- ggpredict(m2, terms = c( "logCV","habitat","crop"))
+a2<-plot(pred1)+
+  labs(title = "Richness",
+       x = "LogCV",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r, fig.width=20, fig.height=26}
+(a1/a2)+ plot_layout(guides = "collect") &  
+  theme(legend.position = "bottom")
+```
+
+```{r,fig.width=4, fig.height=4}
+pred2 <-ggpredict(m2, terms = c( "dia","habitat"))
+plot(pred2)+
+  labs(title = "",
+       x = "Day",
+       y = "") +
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        legend.position = "bottom")
+```
+
+# Models Auchenorrhyncha olive
+
+```{r, echo = FALSE,results = "hide"}
+au_oli<-subset(au, crop== "Olive")
+au_oli$id_loc<- droplevels(au_oli$id_loc) # Actualiza los niveles del factor id_loc
+au_oli$id_finca<- droplevels(au_oli$id_finca)
+au_oli %>% dplyr::count(id_finca,n_asp) %>% 
+  group_by(id_finca) %>% summarise(nolivar=sum(n))
+
+n_muestreo3<-  c("ca02" =102,  "co01" = 105, 
+                 "hu04" = 69, "se01" = 75, "se02" =96)
+au_oli$n_muestreo3 <- n_muestreo3[au_oli$id_finca]
+au_oli$logn_m3<-log(au_oli$n_muestreo3+1)
+```
+
+## Abundance
+
+```{r}
+m3<-glmmTMB(formula = abundancia ~ habitat + logCV + 
+               ns(dia, 4) + lognp_wo + (1 | id_finca:year), data = au_oli, 
+             family = nbinom2(link = "log"), ziformula = ~0, dispformula = ~1, 
+             offset = logn_m3, control = control.tmb, REML = T)
+```
+
+## Richness
+
+```{r}
+m4<-glmmTMB(formula = nspp ~ habitat + logCV +  ns(dia,4) +
+              lognp_wo +   (1 | id_finca:year), 
+            data = au_oli, 
+            family = genpois(link = "log"), 
+            ziformula = ~0, 
+            dispformula = ~1, 
+            offset = logn_m3, 
+            control = control.tmb, 
+            REML = T)
+```
+
+```{r}
+p3<-plot_model(m3, 
+               show.data=FALSE, 
+               type="est",
+               ci.lvl=0.95, 
+               terms=NULL, 
+               show.values=TRUE,
+               value.size = 6, 
+               value.offset=0.4, 
+               colors =c("brown1","cyan4") ,
+               vline.color = "blueviolet",
+               axis.lim=c(0.01,50))+
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank())
+
+p4<-plot_model(m4, 
+               show.data=FALSE, 
+               type="est",
+               ci.lvl=0.95, 
+               terms=NULL, 
+               show.values=TRUE,
+               value.size = 6, 
+               value.offset=0.4, 
+               colors =c("brown1","cyan4") ,
+               vline.color = "blueviolet",
+               axis.lim=c(0.01,50))+
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank())
+(p3+p4)+ plot_annotation( tag_levels = "A")
+```
+
+```{r}
+pred1 <- ggpredict(m3, terms = c( "logCV","habitat"))
+g3<-plot(pred1)+
+  labs(title = "",
+       x = "",
+       y = "Abundance") +
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(),
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        legend.position = "bottom")
+```
+
+```{r,fig.width=4, fig.height=4}
+pred2 <-ggpredict(m3, terms = c( "dia","habitat"))
+g4<-plot(pred2)+
+  labs(title = "",
+       x = "",
+       y = "") +
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        legend.position = "bottom")
+```
+
+```{r}
+pred1 <- ggpredict(m4, terms = c( "logCV","habitat"))
+g5<-plot(pred1)+
+  labs(title = "",
+       x = "LogCV",
+       y = "Richness") +
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        legend.position = "bottom")
+```
+
+```{r,fig.width=4, fig.height=4}
+pred2 <-ggpredict(m4, terms = c( "dia","habitat"))
+g6<-plot(pred2)+
+  labs(title = "",
+       x = "Day",
+       y = "") +
+  theme_minimal(base_size = 16)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        legend.position = "bottom")
+```
+
+```{r}
+(g3+g4)/(g5+g6)+  plot_layout(guides = "collect") &  # Junta las leyendas
+  theme(legend.position = "bottom")
+       
+```
+# Adults Aphrophoeidae
+```{r,echo = FALSE,results = "hide"}
+au_sub <- subset(au, habitat != "Canopy" & id_finca != "co03")
+au_sub$habitat<-as.factor(au_sub$habitat)
+au_sub$crop<-as.factor(au_sub$crop)
+
+au_sub$id_finca <- droplevels(au_sub$id_finca)
+au_sub$crop <- droplevels(au_sub$crop)
+
+au_sub %>% dplyr::count(id_finca,n_asp) #Cambiar el offset
+n_muestreo2<-  c("ca01" = 68, "ca02" =68, "ca03" = 68, "co01" = 70, "co02" = 70,  
+                 "hu01" = 74, "hu02" = 68, "hu03" =48, "hu04" = 46, "se01" = 50, "se02" =64)
+au_sub$n_muestreo2 <- n_muestreo2[au_sub$id_finca]
+au_sub$logn_m2<-log(au_sub$n_muestreo2+1)
+sum(is.na(au_sub))
+```
+
+## Abundance Adults Aphrophoridae (total)
+```{r}
+m5<-glmmTMB(formula = aphro_total ~  habitat + logCV +ns(dia, 6) +lognp_s + (1 |  id_loc:year),
+            data = au_sub, 
+            family = genpois(link = "log"), 
+            ziformula = ~0, 
+            dispformula = ~1, 
+            offset = logn_m2, 
+            control = control.tmb, 
+            REML = T)
+```
+## Abundance Adults Neophilaenus campestris
+
+```{r}
+m6<-glmmTMB(formula = nc ~  logCV + ns(dia, 6) + lognp_s + logDSH + (1 |  id_loc:year),
+            data = au_sub,
+            family = nbinom2(link = "log"), 
+            ziformula = ~0,
+            dispformula = ~1,
+            offset = logn_m2, 
+            control = control.tmb, 
+            REML = T)
+```
+
+## Abundance Adults Lepyronia coleoptrata
+```{r}
+m7<-glmmTMB(formula = lc ~ habitat +cv+ logPp + Tmax + lognp_s+(1 | id_loc:year),
+            data = au_sub, 
+            family = genpois(link = "log"), 
+            ziformula = ~0, 
+            dispformula = ~1, 
+            offset = logn_m2,
+            control = control.tmb,
+            REML = T)
+```
+
+## Abundance Adults Philaenus spumarius
+
+```{r}
+#Elimino las localidades que no hay-- cambio data (504 obs)
+au_sub1<- subset(au_sub, !(id_loc %in% c("xf03", "xf04", "xf05")))
+au_sub1$id_loc<- droplevels(au_sub1$id_loc)
+au_sub1$crop<- droplevels(au_sub1$crop)
+```
+
+```{r}
+m8<-glmmTMB( formula = ps~ cv, 
+             data = au_sub1,
+             family =nbinom1(link = "log"), 
+             ziformula = ~0, 
+             dispformula = ~1,
+             offset = logn_m2, 
+             control = control.tmb, 
+             REML =T)
+```
+
+```{r}
+pred1 <- ggpredict(m5, terms = c( "logCV","habitat"))
+b1<-plot(pred1)+
+  labs(title = "Adults Aphrophoridae",
+       x = "LogCV",
+       y = "Abundance") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+```{r}
+pred2 <- ggpredict(m5, terms = c( "dia","habitat"))
+b2<-plot(pred2)+
+  labs(title = "",
+       x = "Day",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r}
+(b1+b2)+  plot_layout(guides = "collect") &  # Junta las leyendas
+  theme(legend.position = "bottom")
+```
+
+```{r}
+data<-read_excel(here("data/matriz_ninfas_modelos.xlsx")) #matriz ninfas envieroment
+```
+
+```{r,echo = FALSE,results = "hide"}
+##Data estructura adultos
+au$id_loc<-as.factor(au$id_loc)
+au$id_finca<-as.factor(au$id_finca)
+au$crop<-as.factor(au$crop)
+au <- au %>%
+  mutate(crop = dplyr::recode(as.character(crop),
+      "almendro"  = "Almond",
+      "arándano"  = "Blueberry",
+      "cítricos"  = "Citrus",
+      "olivar"    = "Olive",
+      "vid"       = "Vineyard"))
+au$habitat<-as.factor(au$habitat)
+
+au <- au %>%
+  mutate(habitat = dplyr::recode(as.character(habitat),
+          "borde"="Edge",
+          "copa"="Canopy", 
+          "interior"= "Within-crop"))  
+
+
+##Data estructura ninfas
+data$id_loc<-as.factor(data$id_loc)
+data$id_finca<-as.factor(data$id_finca)
+data$crop<-as.factor(data$crop)
+data$habitat<-as.factor(data$habitat)
+data <- data %>%
+  mutate(crop = dplyr::recode(as.character(crop),
+      "almendro"  = "Almond",
+      "arándano"  = "Blueberry",
+      "cítricos"  = "Citrus",
+      "olivar"    = "Olive",
+      "vid"       = "Vineyard"))
+data$habitat<-as.factor(data$habitat)
+
+data <- data%>%
+  mutate(habitat = dplyr::recode(as.character(habitat),
+          "borde"="Edge",
+          "copa"="Canopy", 
+          "interior"= "Within-crop"))  
+data$manejo<-as.factor(data$manejo)
+data$seasonality<-as.factor(data$seasonality)
+data$year<-as.factor(data$year)
+data$logTm<-log(data$Tmax+1)
+data$logca_h<-log(data$ca_h+1)
+```
+
+
+```{r}
+set.seed(123)
+```
+
+```{r}
+options(contrasts=c(factor="contr.sum", ordered="contr.poly"))
+control.tmb <- glmmTMBControl(optCtrl=list(iter.max=1000, eval.max=1000), parallel=10) 
+```
+
+# Nymphs Aphrophoeidae 
+##Abundance total
+
+```{r}
+m9<-glmmTMB(formula = ind ~ crop + habitat + manejo + logcv + logTm + logDSH + ns(dia, 4) + lognp_s +
+            (1 | id_loc:year), 
+            data = data, 
+            family = genpois(link = "log"), 
+            ziformula = ~0, 
+            dispformula = ~1, 
+            offset = off_finca, 
+            control = control.tmb, 
+            REML = T)
+```
+
+## Abundance Neophilaenus campestris
+```{r}
+m10<-glmmTMB(formula = nc~ habitat  + logcv + logPp + logTm + logDSH + ns(dia, 4)+logca_h+ loged_s+lognp_s +lognp_wo + (1 | id_loc:year), 
+             data = data,
+             family = genpois(link = "log"), 
+             ziformula = ~0, 
+             dispformula = ~1, 
+            offset = off_finca, 
+            control = control.tmb, 
+            REML = T)
+```
+
+## Abundance Lepyronia coleoptrata
+```{r}
+m11<-glmmTMB(formula = lc ~ habitat +logcv  + ns(dia, 4) + lognp_s + (1 | id_loc:year),
+             data = data, 
+             family = genpois(link = "log"), 
+             ziformula = ~0, 
+             dispformula = ~1, 
+             offset = off_finca,
+             control = control.tmb, 
+             REML = T)
+```
+
+## Abundance Philaenus spimarius
+```{r}
+m12<-glmmTMB(formula = ps ~ logcv  + lognp_h + logDSH + (1 | id_loc:year),
+             data = data, 
+             family = genpois(link = "log"),
+             ziformula = ~0, 
+             dispformula = ~1,
+             offset = off_finca,
+             control = control.tmb, 
+             REML = T)
+```
+
+```{r}
+pred1 <- ggpredict(m9, terms = c( "logcv","habitat","crop"))
+b3<-plot(pred1)+
+  labs(title = "Nymphs Aphrophoridae",
+       x = "LogCV",
+       y = "Abundance") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r,fig.width=10, fig.height=12}
+(b1+b2)/b3+  plot_layout(guides = "collect") &  # Junta las leyendas
+  theme(legend.position = "bottom")
+```
+
+```{r}
+pred1 <- ggpredict(m6, terms = c( "dia","logDSH"))
+n1<-plot(pred1)+
+  labs(title = "",
+       x = "Day",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r}
+pred1 <- ggpredict(m10, terms = c( "logca_h","logDSH"))
+n2<-plot(pred1)+
+  labs(title = "",
+       x = "Log(ca-H)",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r}
+pred1 <- ggpredict(m7, terms = c( "cv","habitat"))
+n3<-plot(pred1)+
+  labs(title = "",
+       x = "CV",
+       y = "Abundance") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "bottom")
+```
+
+```{r}
+pred1 <- ggpredict(m11, terms = c( "lognp_s ","habitat"))
+n4<-plot(pred1)+
+  labs(title = "",
+       x = "Log(np-S)",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "right")
+```
+
+```{r, fig.width=4, fig.height=4}
+pred1 <- ggpredict(m12, terms = c( "lognp_h ","logDSH"))
+n5<-plot(pred1)+
+  labs(title = "",
+       x = "Log(np-H)",
+       y = "") +
+  theme_minimal(base_size = 20)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 20),
+        axis.text.x = element_text(size = 16, color = "black"),
+        axis.text.y = element_text(size = 16, color = "black"),
+        legend.text = element_text( color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "cm"),
+        strip.text = element_text(size = 24, face = "bold"),
+        legend.position = "right")
+```
+
+```{r, fig.width=10, fig.height=12}
+
+d1<-(n1+n2)+plot_layout(guides = "collect") &  # Junta las leyendas
+  theme(legend.position = "right")
+d2<-(n3+n4) +plot_layout(guides = "collect") &  # Junta las leyendas
+  theme(legend.position = "right")
+d1/d2/n5
 ```
 
