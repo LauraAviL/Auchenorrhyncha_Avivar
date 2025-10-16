@@ -110,6 +110,24 @@ data$year<-as.factor(data$year)
 data$logTm<-log(data$Tmax+1)
 data$logca_h<-log(data$ca_h+1)
 ```
+Exploratory Data Analysis
+```{r}
+relaciones <- ~nspp+Tmax+dsh+prep_smn+dia+ca_h+ca_s+np_w+np_h+np_wo+np_s+cv
+pairs(relaciones, data=au)
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...) {
+  usr <- par("usr")
+  on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y, use="complete.obs"))
+  txt <- format(c(r, 0.123456789), digits=digits)[1]
+  txt <- paste(prefix, txt, sep="")
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, col="blue", cex = cex.cor * (1 + r) / 0.1)    ## cambiar el tamannio de la letra modificando "0.25" en el denominador de "cex = cex.cor * (1 + r) / 0.25"
+}
+scatterplotMatrix(relaciones, data=au, pch=19, cex=0.2, cex.lab=3, cex.axis=1.5, diagonal=TRUE, col="red", 
+                  col.axis='black', regLine=list(method=lm, col="blue", lwd=2), smooth=TRUE,
+                  main="Pearson corraletion coefficient", lower.panel=panel.cor)
+```
 
 
 ```{r}

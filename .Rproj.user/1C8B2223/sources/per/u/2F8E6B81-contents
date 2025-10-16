@@ -1,0 +1,114 @@
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,patchwork,
+  FSA, vegan, mvabund, reshape2, glmmTMB, MuMIn, lmtest, DHARMa, psych, performance, car, emmeans, sjPlot,effects, visreg, parameters, MASS, effectsize, splines, ggplot2, ggeffects, pROC,tweedie, lubridate,bbmle, moments, flextable,TMB, psych
+)
+
+au<-read_excel(here("data/octubre_modelos.xlsx")) #matriz adultos con envieroment
+data<-read_excel(here("data/matriz_ninfas_modelos.xlsx")) #matriz ninfas envieroment
+##Data estructura adultos
+au$id_loc<-as.factor(au$id_loc)
+au$id_finca<-as.factor(au$id_finca)
+au$crop<-as.factor(au$crop)
+au <- au %>%
+  mutate(crop = dplyr::recode(as.character(crop),
+                       "almendro"  = "Almond",
+                       "arándano"  = "Blueberry",
+                       "cítricos"  = "Citrus",
+                       "olivar"    = "Olive",
+                       "vid"       = "Vineyard"))
+au$habitat<-as.factor(au$habitat)
+
+au <- au %>%
+  mutate(habitat = dplyr::recode(as.character(habitat),
+                          "borde"="Edge",
+                          "copa"="Canopy", 
+                          "interior"= "Within-crop")) 
+
+au$manejo<-as.factor(au$manejo)
+au$seasonality<-as.factor(au$seasonality)
+au$year<-as.factor(au$year)
+au$logabun<-log(au$abundancia+1)
+au$logCV<-log(au$cv+1) 
+au$lognp_w<-log(au$np_w+1) 
+au$lognp_wo<-log(au$np_wo+1) 
+au$lognp_h<-log(au$np_h+1) 
+au$lognp_s<-log(au$np_s+1) 
+au$lognp_i<-log(au$np_i+1) 
+au$lognp_art<-log(au$np_art+1) 
+au$logDSH<-log(au$dsh+1)
+au$logPp<-log(au$prep_smn+1)
+au$logDS<-log(au$dsf+1)
+au$logshdi<-log(au$shdi+1)
+au$loged_s<-log(au$ed_s+1) 
+au$logca_h<-log(au$ca_h+1)
+au$logca_s<-log(au$ca_s+1)
+au$logTmx<-log(au$Tmax+1)
+au %>%  group_by(id_finca) %>% #numero de aspiraciones por finca
+  summarise(count_habitat = sum(n_asp, na.rm = TRUE))
+n_muestreo1<-  c("ca01" = 204, "ca02" =204, "ca03" = 136, "co01" = 210, "co02" = 210, "co03" = 70, 
+                 "hu01" = 148, "hu02" = 136, "hu03" =96, "hu04" = 138, "se01" = 150, "se02" =192)
+au$n_muestreo1 <- n_muestreo1[au$id_finca]
+au$logn_m1<-log(au$n_muestreo1+1)
+au$logn_c<-log(au$n_cultivo+1)
+##Data estructura ninfas
+data$id_loc<-as.factor(data$id_loc)
+data$id_finca<-as.factor(data$id_finca)
+data$crop<-as.factor(data$crop)
+data$habitat<-as.factor(data$habitat)
+data$manejo<-as.factor(data$manejo)
+data$seasonality<-as.factor(data$seasonality)
+data$year<-as.factor(data$year)
+data$logTm<-log(data$Tmax+1)
+data$logca_h<-log(data$ca_h+1)
+set.seed(123)
+options(contrasts=c(factor="contr.sum", ordered="contr.poly"))
+control.tmb <- glmmTMBControl(optCtrl=list(iter.max=1000, eval.max=1000), parallel=10)
+m1<-glmmTMB(formula = abundancia ~ crop + habitat + ns(dia, 4) +
+              (1 | id_loc:year) +logCV+ lognp_w + lognp_wo, data = au, family = genpois(link = "log"), 
+            ziformula = ~0, dispformula = ~1, offset = logn_m1,
+            control = control.tmb, REML = T)
+m2<-glmmTMB(formula = nspp ~ crop + habitat + ns(dia, 4) + (1 | id_loc:year)+
+              logCV+ lognp_w  + lognp_wo, data = au, family = genpois(link = "log"),
+            ziformula = ~0, dispformula = ~1, offset = logn_m1, 
+            control = control.tmb, REML = T)
+
+
+pred1 <- ggpredict(m1, terms = c( "logCV","habitat","crop"))
+p1<-plot(pred1)+
+  labs(title = "",
+       x = "",
+       y = "Abundance") +
+  theme_minimal(base_size = 15)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text(face = "italic", color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        legend.position = "bottom")
+
+pred2 <-ggpredict(m1, terms = c( "dia","habitat"))
+p2<-plot(pred2)+
+  labs(title = "",
+       x = "",
+       y = "Abundance") +
+  theme_minimal(base_size = 15)+ 
+  theme(panel.border = element_rect(color = "black", 
+                                    fill = NA, 
+                                    linewidth = 0.2),
+        axis.title.x = element_text(),
+        axis.title.y = element_text(size = 14),
+        axis.text.x = element_text(size = 12, color = "black"),
+        axis.text.y = element_text(size = 12, color = "black"),
+        legend.text = element_text(face = "italic", color = "black"),
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor.x = element_blank(), 
+        legend.position = "bottom")
+

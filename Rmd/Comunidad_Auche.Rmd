@@ -1,0 +1,213 @@
+---
+title: "Sep_2025_Articulo1"
+author: "Laura Avivar-Lozano, José Mª. Molina-Rodríguez , Sergio Pérez-Guerrero"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 5
+    toc_float: TRUE
+    number_section: TRUE
+    theme: "cosmo"
+    code_download: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+
+```{=html}
+<style>
+  body {
+    text-align: justify;
+  }
+</style>
+```
+
+```{r, message=FALSE}
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,
+  bipartite, FSA, vegan, mvabund, reshape2, iNEXT,indicspecies, purrr
+)
+```
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(
+  dev        = "png",
+  fig.path   = paste0(here::here("figure", "Artuculo1_"), "/plot-"),
+  fig.width  = 10,
+  fig.height = 8, 
+  dpi=300
+)
+```
+
+# Auchenorrhyncha Woody Crops
+
+**Do Auchenorrhyncha communities vary across different woody crops?**
+
+-  Data clean and exploratory analisys
+
+===used: data/resultado_taxonomia_final2.xlsx===
+
+```{r, echo =FALSE}
+tax<-read_excel(here("data/resultado_taxonomia_final2.xlsx")) 
+tax1<-tax |> 
+  mutate( muestra_id = paste(id_finca, fecha, sep = "_")) |> 
+  dplyr::filter(año!=2020, !iden %in% c("noiden", "genero"))  #delete year=2020 and Unidentifiable
+metadato_tax1 <- tax1 |> distinct(crop,  muestra_id)
+```
+
+```{r, echo =FALSE}
+df <- tax1 |>
+  group_by(crop, id_finca, fecha, muestra_id, code) |>
+  summarise(n = sum(total, na.rm = TRUE), .groups = "drop")
+
+metadato_df <- df |> distinct(crop,  muestra_id)
+
+df<-df |>  filter(!is.na(code), n >= 0)
+```
+
+-  Exploratory (actual effort + observed diversity)
+
+```{r,echo =FALSE}
+exploratorio <- metadato_tax1|> count(crop, name = "total_samples") |>
+  left_join(df |> distinct(crop, muestra_id) |> count(crop, name = "samples_with_species"),
+            by = "crop") |>
+  mutate(samples_with_species = replace_na(samples_with_species, 0L)) |>
+  left_join(df |> group_by(crop) |>
+              summarise(Abundance = sum(n), Richness = n_distinct(code), .groups="drop"),
+            by = "crop") |>
+  left_join({
+    M <- df|> group_by(crop, code) |> summarise(n = sum(n), .groups="drop") |>
+      pivot_wider(names_from = code, values_from = n, values_fill = 0)
+    tibble(crop = M$crop,
+           Shannon_H = diversity(as.matrix(M[,-1,drop=FALSE]), "shannon"),
+           Simpson   = diversity(as.matrix(M[,-1,drop=FALSE]), "simpson"))
+  }, by = "crop") |>
+  arrange(crop)
+```
+
+```{r, echo =FALSE}
+knitr::kable(
+  exploratorio)
+``` 
+
+
+
+- Accumulation curves (only samples with ≥1 species for the curve)
+
+```{r, echo =FALSE, results='hide' }
+set.seed(123)
+mats <- df |>
+  group_by(crop) |>
+  group_map(~ {
+    w <- pivot_wider(.x, names_from = code, values_from = n, values_fill = 0) |> arrange(muestra_id)
+    if (nrow(w) == 0) return(NULL)
+    mat <-data.matrix(w[,-1,drop=FALSE])
+    rownames(mat) <- w$muestra_id
+    mat[, colSums(mat) > 0, drop = FALSE]             # remove species never observed
+  }, .keep = TRUE) |> 
+  set_names(unique(df$crop))
+
+specacc <- imap(mats, ~  if (!is.null(.x) && nrow(.x) >= 2)
+  specaccum(.x, method = "random", permutations = min(200, max(1, factorial(nrow(.x))))) else NULL)
+
+par(mfrow = c(ceiling(length(specacc)/2), 2), mar = c(4,4,2,1))
+imap(specacc, ~ {
+  if (is.null(.x)) {
+    S <- if (is.null(mats[[.y]])) 0 else sum(colSums(mats[[.y]]) > 0)
+    plot(1, S, xlim = c(1,2), ylim = c(0, max(2, S*1.2)), xlab = "Nº samples", ylab = "Accumulated species",
+         main = paste("Accumulation -", .y)); points(1, S, pch = 19)
+  } else {
+    plot(.x, ci.type = "poly", ci.col = "lightgray", ci.lty = 0,
+         xlab = "Nº samples (id_finca×date)", ylab = "Accumulated species", main = paste("Accumulation -", .y))
+    lines(.x, lwd = 2)
+  }
+})
+par(mfrow = c(1,1))
+
+```
+
+
+- Rarefaction curve
+
+
+```{r, echo =FALSE, results='hide'}
+# --- Incidence list: c(T, Q1, Q2, ...); T = nº total de muestras (incluye 0 especies) ---
+incidence_list <- metadato_df |>
+  group_split(crop) |> set_names(unique(metadato_df$crop)) |>
+  lapply(function(M) {
+    crop_i <- unique(M$crop)
+    Tm <- nrow(M)  # total samples for this crop
+    A  <- df |> filter(crop == crop_i) |>
+      select(muestra_id, code, n) |>
+      pivot_wider(names_from = code, values_from = n, values_fill = 0)
+    if (nrow(A) == 0) return(c(Tm))
+    mat <- as.matrix(A[ , -1, drop = FALSE])
+    Qi  <- colSums(mat > 0)
+    c(Tm, as.numeric(Qi))
+  })
+```
+
+```{r, echo =FALSE, results='hide'}
+
+# --- Rarefaction at common number of samples (minimum across crops) ---
+n_common <- min(sapply(incidence_list, function(v) ifelse(length(v) > 0, v[1], Inf)))
+div_raref <- estimateD(incidence_list, q = c(0,1,2),
+                       datatype = "incidence_freq",
+                       base = "size", level = n_common) |>
+  arrange(Assemblage, Order.q)
+
+print(div_raref)
+# q=0: expected richness at n_common samples; q=1: Shannon-type; q=2: Simpson-type
+
+#rarefaction plot by number of samples
+
+out_inc <- iNEXT(incidence_list, q = c(0,1,2), datatype = "incidence_freq")
+
+# Rarefaction table (sample-size based)
+sb <- out_inc$iNextEst$size_based
+
+# Rename 't' -> 'm' for plotting compatibility
+sb <- sb %>%
+  rename(m = t) %>%
+  mutate(
+    Assemblage = factor(Assemblage),
+    Order.q = factor(Order.q, levels = c(0,1,2),
+                     labels = c("q=0","q=1","q=2"))
+  )
+```
+
+```{r, echo =FALSE, results='hide'}
+ggplot(sb, aes(x = m, y = qD, color = Assemblage, fill = Assemblage)) +
+  geom_ribbon(aes(ymin = qD.LCL, ymax = qD.UCL), alpha = 0.15, color = NA) +
+  geom_line(linewidth = 1) +   # usa linewidth en vez de size (aviso de ggplot2>=3.4)
+  facet_wrap(~ Order.q, scales = "free_y") +
+  labs(x = "Samples (id_finca × date)",
+       y = "Expected diversity",
+       title = "Sample-based rarefaction by crop") +
+  theme_bw(base_size = 14) +
+  theme(strip.text = element_text(face = "bold"),
+        legend.position = "bottom")
+```
+
+Standardizing sampling effort to the same number of samples per plot (id_finca × date), the curves level off for most crops, indicating adequate sampling; however, in some cases the still-positive slope suggests additional species could be detected with greater effort.
+The rarefaction curves show that the effective diversity of Auchenorrhyncha differs among crops, being highest in olive and blueberry, followed by citrus, while vineyard and almond host communities that are less diverse and more dominated.
+The decline in diversity from q = 0 to q = 2 indicates that, although some crops harbor many species, abundance is concentrated in a few common species.
+In this framework, q = 0 represents species richness, q = 1 weights by abundance (Shannon diversity), and q = 2 gives greater weight to dominant species (Simpson diversity).
+
+Estandarizado el esfuerzo de muestreo al mismo número de muestras por parcela (id_finca × fecha), las curvas tienden a estabilizarse en la mayoría de los cultivos, lo que indica que el muestreo fue relativamente adecuado, aunque en algunos casos la pendiente aún ascendente sugiere que podrían detectarse especies adicionales con un mayor esfuerzo. Las curvas de rarefacción muestran que la diversidad efectiva de Auchenorrhyncha difiere entre cultivos, siendo mayor en olivar y arándano, seguidos de cítricos, mientras que viñedo y almendro presentan comunidades menos diversas y más dominadas. La disminución de la diversidad desde q = 0 hasta q = 2 indica que, aunque algunos cultivos albergan un número elevado de especies, la abundancia está concentrada en unas pocas especies comunes. 
+En este contexto, q = 0 representa la riqueza de especies, q = 1 pondera según abundancia (diversidad de Shannon) y q = 2 da más peso a las especies dominantes (diversidad de Simpson).
+
+```{r}
+matriz<-df |> 
+  select(muestra_id, code, n) |>
+  tidyr::pivot_wider(names_from = code, values_from = n, values_fill = 0) |> 
+  select(-muestra_id)
+```

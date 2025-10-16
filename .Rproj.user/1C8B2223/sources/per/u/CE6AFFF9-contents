@@ -1,0 +1,38 @@
+#GLM gremios arañas y cultivos
+
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(
+  skimr, writexl, readr, readxl, data.table,
+  tidyverse, tidylog, summarytools, here,
+  plotrix, lubridate, textshape, ggrepel,ggforce,patchwork,
+  FSA, vegan, mvabund, reshape2, glmmTMB, MuMIn, lmtest, DHARMa, psych, performance, car, emmeans, sjPlot,effects, visreg, parameters, MASS, effectsize, splines, ggplot2, ggeffects, pROC,tweedie, lubridate,bbmle, moments, flextable,TMB, psych
+)
+
+ar<-read.csv2(here("data/metar.csv"))
+str(ar)
+#Tranformamos
+ar$Crop<-factor(ar$Crop)
+ar$g<-factor(ar$g)
+str(ar)
+glmm<-glm(n~Crop, family=poisson, data=ar)
+summary(glmm)
+Anova(glmm, Type=II)
+install.packages("multcomp")
+library(multcomp)
+Postt <- glht(glmm, linfct=mcp(Crop="Tukey"))
+summary(Postt)
+glmm2<-glm(n~g,family=poisson, data=ar)
+summary(glmm2)
+Anova(glmm2, Type=II)
+Postt2 <- glht(glmm2, linfct=mcp(g="Tukey"))
+summary(Postt2)
+simulationOutput <- simulateResiduals(fittedModel = modelo.g, n = 500) # NO Hay sobresispersion
+plotSimulatedResiduals(simulationOutput = simulationOutput)
+
+##############################
+
+modelo.g <- glmmTMB(n~  Crop+g,
+                    family=nbinom2(link="log"),
+                    ziformula= ~0,
+                    dispformula= ~ 1,
+                    data=ar, REML=TRUE, control=control.tmb)
